@@ -187,9 +187,13 @@ export interface OrderSummaryHeader {
   createdAt: string;
 }
 
+// Same reasoning as mdEscape() below: street/city/etc. are only .trim()'d
+// server-side, so an address can carry a "|" or a newline that would
+// otherwise break the bullet line (or, for a future table use, the cell).
 function addressLine(a: OrderSummaryAddress): string {
   return [a.street, a.street2, `${a.postalCode} ${a.city}`, a.region, a.countryCode]
     .filter(Boolean)
+    .map((part) => mdEscape(part as string))
     .join(", ");
 }
 

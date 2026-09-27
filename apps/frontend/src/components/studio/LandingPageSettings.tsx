@@ -184,7 +184,7 @@ export function LandingPageAddress({ page, onSaved }: SectionProps) {
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(page.isStudioDefault ? `${origin}/` : url);
+      await navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {

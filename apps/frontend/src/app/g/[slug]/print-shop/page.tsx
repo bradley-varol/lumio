@@ -1141,6 +1141,34 @@ function CartStep({
                 })}
           </p>
         )}
+        {isPickup ? (
+          <div className="mt-3 rounded-md border border-line-subtle bg-surface-sunken px-3 py-2 text-sm text-ink-secondary">
+            {t("printShop.pickupNote")}
+          </div>
+        ) : (
+          <div className="mt-3 space-y-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.shipToResidence}
+                onChange={(e) => setForm({ ...form, shipToResidence: e.target.checked })}
+              />
+              {t("printShop.shipToResidence")}
+            </label>
+            {!form.shipToResidence && (
+              <>
+                <h3 className="text-xs font-semibold text-ink-secondary">
+                  {t("printShop.shippingAddress")}
+                </h3>
+                <AddressFields
+                  autoCompletePrefix="shipping"
+                  value={form.shippingAddress}
+                  onChange={(shippingAddress) => setForm({ ...form, shippingAddress })}
+                />
+              </>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Fattura — what it asks depends on the studio's country */}

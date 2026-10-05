@@ -4,6 +4,7 @@ import {
   resolveShippingCents,
   isMissingRequiredPaymentReference,
   allowedTransitionsFor,
+  studioNewOrderMailTrigger,
   type CartItemInput,
   type VariantPricingInfo,
 } from "./orders.js";
@@ -339,6 +340,21 @@ describe("allowedTransitionsFor — cash on delivery", () => {
     for (const status of ["confirmed", "paid", "in_production", "delivered"]) {
       expect(allowedTransitionsFor(status, false)).not.toContain("approve_cod");
     }
+  });
+});
+
+describe("studioNewOrderMailTrigger", () => {
+  it("tells the studio at creation about an offline invoice", () => {
+    expect(studioNewOrderMailTrigger("offline_invoice")).toBe("created");
+  });
+
+  it("tells the studio about an online order only once it is paid", () => {
+    expect(studioNewOrderMailTrigger("stripe_connect")).toBe("paid");
+  });
+
+  it("sends no new-order mail for any other mode", () => {
+    expect(studioNewOrderMailTrigger("cash_on_delivery")).toBeNull();
+    expect(studioNewOrderMailTrigger("bogus")).toBeNull();
   });
 });
 

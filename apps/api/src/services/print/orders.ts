@@ -322,6 +322,20 @@ export interface CheckoutInput extends CheckoutCustomerInput {
   guestNote?: string | null;
 }
 
+/** When the studio hears about a new order. An offline_invoice order is
+ *  real from the start, so the studio is told at creation. An online
+ *  (stripe_connect) order only counts once it is paid: telling the studio
+ *  at creation would add a mail for every checkout abandoned at the
+ *  Stripe step. Any other mode (cash_on_delivery is only set by the
+ *  studio itself) gets no such mail. */
+export function studioNewOrderMailTrigger(
+  paymentMode: string
+): "created" | "paid" | null {
+  if (paymentMode === "offline_invoice") return "created";
+  if (paymentMode === "stripe_connect") return "paid";
+  return null;
+}
+
 /** Creates an order, always starting in 'pending_payment'. stripe_connect
  *  orders move to 'paid' once the payment succeeds; offline_invoice
  *  orders require a studio staff member to confirm payment manually via
@@ -425,8 +439,9 @@ export async function createOrder(input: CheckoutInput): Promise<{
             actor: "guest",
             data: { paymentMode: input.paymentMode } as never,
           },
-          // Marker set together with the order, so the mail below is sent
-          // exactly once — createOrder() is the only path that creates one.
+          // Audit marker only (shown in the order timeline); nothing reads
+          // it to decide whether to send. The mail below is sent once
+          // because createOrder() is the only path that creates an order.
           {
             eventType: "mails_sent_created",
             actor: "system",
@@ -437,7 +452,8 @@ export async function createOrder(input: CheckoutInput): Promise<{
     },
   });
 
-  // Order received: tell the customer and the studio. The order is still
+  // Order received: tell the customer (and the studio, for an offline
+  // invoice — see studioNewOrderMailTrigger). The order is still
   // 'pending_payment' here; the payment mail follows once it is paid.
   void sendOrderMails(order.id, "created").catch((err) =>
     logger.warn({ err, orderId: order.id }, "print.order.mail_failed")
@@ -807,8 +823,10 @@ function extractEventData(
 // =============================================================================
 /**
  * Versendet die Mails fuer einen Order-Lifecycle-Event:
- *   - created:          Endkunde + Studio (Bestellung eingegangen)
- *   - paid:             nur Endkunde (Zahlung erhalten)
+ *   - created:          Endkunde (Bestellung eingegangen); Studio nur bei
+ *                       offline_invoice (siehe studioNewOrderMailTrigger)
+ *   - paid:             Endkunde (Zahlung erhalten); Studio nur bei
+ *                       stripe_connect (neue, bezahlte Bestellung)
  *   - shipped / ready_for_pickup: nur Endkunde
  * Wird intern von createOrder() und transitionOrder() aufgerufen.
  * Plus extern vom print-mail-sweeper fuer Webhook-getriggerte paid-
@@ -879,8 +897,12 @@ export async function sendOrderMails(
         locale: guestLocale,
       }),
     });
-    // Studio: Eingang
-    if (ownerEmail && (await studioNotifyEnabled(order.tenantId, "print_order"))) {
+    // Studio: Eingang (nur offline_invoice — Stripe-Bestellungen erst bei Zahlung)
+    if (
+      ownerEmail &&
+      studioNewOrderMailTrigger(order.paymentMode) === "created" &&
+      (await studioNotifyEnabled(order.tenantId, "print_order"))
+    ) {
       await sendMail({
         to: ownerEmail,
         ...tmplPrintOrderNotifyStudio({
@@ -889,12 +911,12 @@ export async function sendOrderMails(
           studioName,
           order: orderForMail,
           baseUrl: config.PUBLIC_URL,
+          paid: false,
         }),
       });
     }
   } else if (trigger === "paid") {
-    // Nur Endkunde: Zahlung erhalten. Das Studio kennt die Bestellung
-    // schon aus der 'created'-Mail.
+    // Endkunde: Zahlung erhalten.
     await sendMail({
       to: order.guestEmail,
       ...tmplPrintOrderPaidGuest({
@@ -905,6 +927,25 @@ export async function sendOrderMails(
         locale: guestLocale,
       }),
     });
+    // Studio: bezahlte Stripe-Bestellung. Offline-Rechnungen kennt das
+    // Studio schon aus der 'created'-Mail (und bestaetigt die Zahlung selbst).
+    if (
+      ownerEmail &&
+      studioNewOrderMailTrigger(order.paymentMode) === "paid" &&
+      (await studioNotifyEnabled(order.tenantId, "print_order"))
+    ) {
+      await sendMail({
+        to: ownerEmail,
+        ...tmplPrintOrderNotifyStudio({
+          locale: ownerLocale,
+          branding: mailBranding,
+          studioName,
+          order: orderForMail,
+          baseUrl: config.PUBLIC_URL,
+          paid: true,
+        }),
+      });
+    }
   } else if (trigger === "shipped") {
     await sendMail({
       to: order.guestEmail,

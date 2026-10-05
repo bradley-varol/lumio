@@ -179,11 +179,12 @@ export async function registerAnalyticsRoutes(app: FastifyInstance) {
           LIMIT 5
         `,
 
-        // Print-Shop-Revenue (Brutto-Total von paid+ Orders)
+        // Print-Shop-Revenue (Brutto-Total von bezahlten Orders: paidAt gesetzt)
         prisma.printOrder.aggregate({
           where: {
             tenantId,
             createdAt: { gte: since },
+            paidAt: { not: null },
             status: { in: ["paid", "confirmed", "in_production", "shipped", "delivered"] },
           },
           _sum: { totalCents: true },

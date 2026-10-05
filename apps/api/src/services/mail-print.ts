@@ -308,6 +308,12 @@ const printStudioPhrases = {
     it: "Fattura offline",
     fi: "Lasku jälkikäteen",
   },
+  paymentPaid: {
+    de: "bezahlt",
+    en: "paid",
+    it: "pagato",
+    fi: "maksettu",
+  },
   paymentPending: {
     de: "Zahlung ausstehend",
     en: "payment pending",
@@ -434,18 +440,20 @@ export function tmplPrintOrderNotifyStudio(opts: {
   order: OrderLike;
   baseUrl: string;
   locale?: MailLocale;
+  /** True when the mail goes out because the order has been paid (online
+   *  orders); false when it goes out at creation, before any payment. */
+  paid?: boolean;
 }): { subject: string; text: string; html: string } {
   const { order, baseUrl, branding } = opts;
   const l = opts.locale ?? instanceMailLocale();
   const S = printStudioPhrases;
   const orderUrl = `${baseUrl.replace(/\/+$/, "")}/studio/print-shop/orders/${order.id}`;
   const subject = phrase(S.subject, l, { order: order.orderNumber });
-  // The mail goes out when the order is created, i.e. before any payment.
   const payLabel = `${
     order.paymentMode === "stripe_connect"
       ? phrase(S.payOnline, l)
       : phrase(S.payOffline, l)
-  } — ${phrase(S.paymentPending, l)}`;
+  } — ${phrase(opts.paid ? S.paymentPaid : S.paymentPending, l)}`;
   // Just the pointer that an invoice is due (with the first identifier that
   // is there, for a quick glance) — the full invoice details live in the
   // order in the studio. Which identifiers exist depends on what the studio

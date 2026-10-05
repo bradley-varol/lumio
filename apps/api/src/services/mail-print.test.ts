@@ -120,4 +120,17 @@ describe("print order mails", () => {
     expect(m.text).toContain("Zahlung ausstehend");
     expect(m.text).toContain("/studio/print-shop/orders/o1");
   });
+
+  it("studio mail sent at payment says the order is paid", async () => {
+    const { tmplPrintOrderNotifyStudio } = await load();
+    const m = tmplPrintOrderNotifyStudio({
+      studioName: "Studio X",
+      order: order("stripe_connect"),
+      baseUrl: "https://example.test",
+      locale: "en",
+      paid: true,
+    });
+    expect(m.text).toContain("Online (Stripe) — paid");
+    expect(m.text).not.toContain("payment pending");
+  });
 });

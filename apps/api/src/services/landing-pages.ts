@@ -102,20 +102,6 @@ export function canBeStartPage(access: PageAccess): boolean {
   return access === "public";
 }
 
-/**
- * Truncates plain text for an Open Graph description or a card. Cuts at a word
- * boundary where there is one and adds an ellipsis only when something was cut.
- */
-export function truncateText(text: string, max: number): string {
-  const clean = text.replace(/\s+/g, " ").trim();
-  if (clean.length <= max) return clean;
-  const cut = clean.slice(0, max - 1);
-  // Already ends on a word boundary when the next character is a space.
-  const lastSpace = clean[max - 1] === " " ? -1 : cut.lastIndexOf(" ");
-  const base = lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut;
-  return base.replace(/[\s.,;:!?-]+$/, "") + "…";
-}
-
 // ---------------------------------------------------------------------------
 // Access, password and start page: what a PATCH may change together
 // ---------------------------------------------------------------------------

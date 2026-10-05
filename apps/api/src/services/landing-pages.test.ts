@@ -9,7 +9,6 @@ import {
   isPageIndexable,
   isPreviewVisible,
   resolvePageAccessChange,
-  truncateText,
   type PageAccessState,
 } from "./landing-pages.js";
 
@@ -139,28 +138,6 @@ describe("page access", () => {
     expect(canBeStartPage("public")).toBe(true);
     expect(canBeStartPage("link_only")).toBe(false);
     expect(canBeStartPage("password")).toBe(false);
-  });
-});
-
-describe("truncateText", () => {
-  it("returns short text unchanged, with whitespace collapsed", () => {
-    expect(truncateText("Hello   world\n", 50)).toBe("Hello world");
-  });
-
-  it("cuts long text at a word boundary and adds an ellipsis", () => {
-    const out = truncateText("The quick brown fox jumps over the lazy dog", 20);
-    expect(out.endsWith("…")).toBe(true);
-    expect(out.length).toBeLessThanOrEqual(20);
-    expect(out).toBe("The quick brown fox…");
-  });
-
-  it("does not add an ellipsis when nothing was cut", () => {
-    expect(truncateText("exactly ten", 11)).toBe("exactly ten");
-  });
-
-  it("hard-cuts a single long word", () => {
-    const out = truncateText("a".repeat(100), 10);
-    expect(out).toBe("a".repeat(9) + "…");
   });
 });
 

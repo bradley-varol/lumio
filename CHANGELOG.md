@@ -29,6 +29,8 @@ Changes werden trotzdem klar als solche markiert. Details: `docs/VERSIONING.md`.
 
 ## [Unreleased]
 
+## [0.86.0] - 2026-10-05
+
 A pull is enough — the database migrates automatically on start. Only the main server is affected. **The print-shop checkout asks for more than before** — see below.
 
 ### Added

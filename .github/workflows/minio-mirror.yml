@@ -1,0 +1,94 @@
+name: MinIO image mirror
+
+# Läuft NUR auf GitHub. Kopiert Chainguards MinIO-Build (Server + Client) in
+# die GitHub Container Registry des Projekts und vergibt dort FESTE Tags.
+#
+# Warum: MinIO veröffentlicht keine freien Images mehr (Docker Hub gelöscht,
+# quay.io für anonyme Pulls gesperrt). Chainguard baut MinIO aus dem Quellcode,
+# bietet frei aber nur wandernde Tags (`latest`, `latest-dev`) an. Damit ein
+# `docker compose pull` nie unbemerkt eine andere MinIO-Version bringt, pinnt
+# docker-compose.yml auf die hier erzeugten Tags. Ein Update ist ein bewusster
+# Commit, der den Tag in docker-compose.yml anhebt. Siehe Issue #60.
+#
+# Brücke, kein Dauerzustand: Neue Installationen sollen auf RustFS wechseln;
+# dieses Image hält bestehende MinIO-Installationen ohne Datenumzug am Laufen.
+#
+# Lizenz: MinIO steht unter der GNU AGPL v3. Das Image wird unverändert
+# weiterverteilt. Quellcode: https://github.com/chainguard-forks/minio
+# (Commit steht in der Ausgabe von `minio --version` im Image).
+#
+# Ablauf: Kopiert per `docker buildx imagetools create` (alle Architekturen,
+# Digests bleiben gleich). Ein Tag, den es schon gibt, wird nicht neu
+# geschrieben — feste Tags bleiben fest.
+#
+# Nach dem ERSTEN Lauf einmalig: die beiden Packages (lumio-minio, lumio-mc)
+# in den Package-Settings auf GitHub auf "Public" stellen, sonst können
+# Self-Hoster sie nicht anonym ziehen.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Monatlich prüfen, ob es einen neuen Stand gibt (Tag 3, 04:23 UTC).
+    - cron: "23 4 3 * *"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  mirror:
+    if: ${{ github.server_url == 'https://github.com' }}
+    runs-on: ubuntu-latest
+    env:
+      SRC_SERVER: cgr.dev/chainguard/minio:latest-dev
+      SRC_CLIENT: cgr.dev/chainguard/minio-client:latest-dev
+      DST_SERVER: ghcr.io/${{ github.repository_owner }}/lumio-minio
+      DST_CLIENT: ghcr.io/${{ github.repository_owner }}/lumio-mc
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Versionen bestimmen
+        id: ver
+        run: |
+          docker pull -q "$SRC_SERVER" >/dev/null
+          docker pull -q "$SRC_CLIENT" >/dev/null
+          # Server: MinIO-Release, z.B. RELEASE.2026-09-22T19-25-18Z
+          SERVER_TAG=$(docker run --rm "$SRC_SERVER" --version | head -1 | awk '{print $3}')
+          case "$SERVER_TAG" in RELEASE.*) ;; *) echo "::error::Unerwartete MinIO-Version: $SERVER_TAG"; exit 1 ;; esac
+          # Client: mc meldet im Chainguard-Build keine Release-Version, daher
+          # Build-Datum + Kurz-Digest, z.B. cg-20260924-1a2b3c4d
+          CREATED=$(docker image inspect "$SRC_CLIENT" --format '{{.Created}}' | cut -c1-10 | tr -d '-')
+          DIGEST=$(docker buildx imagetools inspect "$SRC_CLIENT" --format '{{json .Manifest.Digest}}' | tr -d '"' | sed 's/sha256://' | cut -c1-8)
+          CLIENT_TAG="cg-${CREATED}-${DIGEST}"
+          echo "server=$SERVER_TAG" >> "$GITHUB_OUTPUT"
+          echo "client=$CLIENT_TAG" >> "$GITHUB_OUTPUT"
+          echo "Server: $SERVER_TAG · Client: $CLIENT_TAG"
+
+      - name: Kopieren (bestehende Tags bleiben unangetastet)
+        env:
+          SERVER_TAG: ${{ steps.ver.outputs.server }}
+          CLIENT_TAG: ${{ steps.ver.outputs.client }}
+        run: |
+          copy() {
+            local src="$1" dst="$2" tag="$3"
+            if docker buildx imagetools inspect "$dst:$tag" >/dev/null 2>&1; then
+              echo "$dst:$tag existiert schon — übersprungen"
+            else
+              docker buildx imagetools create \
+                --annotation "index:org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+                --annotation "index:org.opencontainers.image.licenses=AGPL-3.0-only" \
+                --annotation "index:org.opencontainers.image.description=MinIO (Chainguard build of chainguard-forks/minio), mirrored for Lumio. Source: https://github.com/chainguard-forks/minio" \
+                -t "$dst:$tag" "$src"
+              echo "$dst:$tag angelegt"
+            fi
+            echo "- \`$dst:$tag\` → \`$(docker buildx imagetools inspect "$dst:$tag" --format '{{json .Manifest.Digest}}' | tr -d '"')\`" >> "$GITHUB_STEP_SUMMARY"
+          }
+          echo "### Gespiegelte Images" >> "$GITHUB_STEP_SUMMARY"
+          copy "$SRC_SERVER" "$DST_SERVER" "$SERVER_TAG"
+          copy "$SRC_CLIENT" "$DST_CLIENT" "$CLIENT_TAG"

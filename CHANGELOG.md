@@ -29,6 +29,8 @@ Changes werden trotzdem klar als solche markiert. Details: `docs/VERSIONING.md`.
 
 ## [Unreleased]
 
+## [0.88.1] - 2026-10-06
+
 A pull is enough. Only installations using the bundled MinIO are affected; the next `docker compose pull` fetches the new image, data and volume stay as they are. External S3 (Hetzner, R2, AWS, B2 …) is not affected.
 
 ### Changed

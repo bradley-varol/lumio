@@ -132,7 +132,7 @@ jobs:
           POSTGRES_PASSWORD: lumio
           POSTGRES_DB: lumio_test
       minio:
-        image: cgr.dev/chainguard/minio:latest
+        image: ghcr.io/markusthiel/lumio-minio:RELEASE.2026-09-22T19-25-18Z
         env:
           MINIO_ROOT_USER: minio
           MINIO_ROOT_PASSWORD: minio123

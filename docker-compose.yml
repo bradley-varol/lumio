@@ -302,13 +302,17 @@ services:
   # Im Cloud-Modus (R2/AWS S3/B2/...) kannst du diesen Service auskommentieren
   # und stattdessen die externen S3-Credentials in der .env hinterlegen.
   minio:
-    # Chainguard-Build statt der MinIO-eigenen Images: MinIO hat die
-    # Community-Images erst auf Docker Hub, dann auch auf quay.io fuer anonyme
-    # Pulls dichtgemacht (401, Stand 2026-09-24). Chainguard baut MinIO aus
-    # dem Quellcode und stellt `latest` frei bereit. Die `-dev`-Variante,
-    # weil nur sie eine Shell und wget fuer den Healthcheck mitbringt.
-    # Uebergangsloesung — der Wechsel auf RustFS ist geplant.
-    image: cgr.dev/chainguard/minio:latest-dev
+    # Projekt-eigenes MinIO-Image (Issue #60): MinIO veroeffentlicht keine
+    # freien Images mehr (Docker Hub geloescht, quay.io fuer anonyme Pulls
+    # gesperrt). Chainguard baut MinIO aus dem Quellcode, frei aber nur unter
+    # wandernden Tags. Der Workflow .github/workflows/minio-mirror.yml kopiert
+    # diesen Build unveraendert nach GHCR und vergibt feste Tags; hier ist
+    # Tag + Digest gepinnt, damit `docker compose pull` nie unbemerkt eine
+    # andere MinIO-Version bringt. Update = bewusster Commit mit neuem Tag.
+    # Es ist die `-dev`-Variante (bringt sh und wget fuer den Healthcheck mit).
+    # Lizenz: GNU AGPL v3, Quellcode https://github.com/chainguard-forks/minio
+    # Bruecke fuer bestehende Installationen — der Wechsel auf RustFS ist geplant.
+    image: ghcr.io/markusthiel/lumio-minio:RELEASE.2026-09-22T19-25-18Z@sha256:472fc4c7a5ad2e6e94625a38d219293344a7b8321676bfa9540cc762d18d5051
     # Chainguard-Images laufen per Default als UID 65532. Bestehende
     # Installationen haben ein minio_data-Volume, das dem alten
     # MinIO-Image (root) gehoert — ohne root koennte MinIO dort nicht
@@ -340,8 +344,9 @@ services:
   # MinIO-Bucket-Init — legt beim ersten Start den Bucket an
   # ---------------------------------------------------------------------------
   minio_init:
-    # -dev-Variante: bringt /bin/sh fuer das Init-Skript mit.
-    image: cgr.dev/chainguard/minio-client:latest-dev
+    # Gleiche Herkunft wie oben (minio-mirror.yml); -dev-Variante mit /bin/sh
+    # fuer das Init-Skript.
+    image: ghcr.io/markusthiel/lumio-mc:cg-20261005-3821d1d1@sha256:922ca0ec9573af00512c091a54f334f9b2ffbaa61b5bf998af03e4870b36c371
     user: "0:0"
     container_name: lumio_minio_init
     depends_on:

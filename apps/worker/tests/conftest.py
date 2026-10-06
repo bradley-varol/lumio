@@ -99,7 +99,7 @@ def env() -> Iterator[dict]:
         cleanup_callbacks.append(postgres.stop)
 
         minio = MinioContainer(
-            "cgr.dev/chainguard/minio:latest",
+            "ghcr.io/markusthiel/lumio-minio:RELEASE.2026-09-22T19-25-18Z",
             access_key="testkey",
             secret_key="testsecret123",
         )

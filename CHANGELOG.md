@@ -29,6 +29,12 @@ Changes werden trotzdem klar als solche markiert. Details: `docs/VERSIONING.md`.
 
 ## [Unreleased]
 
+A pull is enough. Only installations using the bundled MinIO are affected; the next `docker compose pull` fetches the new image, data and volume stay as they are. External S3 (Hetzner, R2, AWS, B2 …) is not affected.
+
+### Changed
+
+- The bundled MinIO now comes from the project's own registry, `ghcr.io/markusthiel/lumio-minio` and `lumio-mc`, pinned to a fixed version and digest instead of following Chainguard's `latest-dev`. It is the same unmodified Chainguard build of MinIO (same data format, still running as root), so existing `minio_data` volumes keep working. A `docker compose pull` no longer brings a different MinIO version unannounced; updates come as a regular Lumio release. This is a bridge for existing installations; the switch to RustFS for new installations is planned (#60). MinIO is AGPL-3.0 licensed, source: https://github.com/chainguard-forks/minio
+
 ## [0.88.0] - 2026-10-06
 
 A pull is enough. Frontend and API are affected, so only the main server. The database migration (new tables for pages) runs automatically on deploy. Nothing changes until a studio creates a page.

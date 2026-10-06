@@ -219,7 +219,7 @@ Wenn das klappt, bist du im echten Disaster in ~1 Stunde wieder online.
 
 - `redis_data` – nur Job-Queue. In-flight-Jobs gehen verloren, das System bootet sauber neu.
 - `caddy_data` – TLS-Certs, Caddy holt sie automatisch neu (Vorsicht nur beim Let's-Encrypt-Rate-Limit).
-- `minio_data` – leer, wenn externes S3 genutzt wird.
+- `rustfs_data` (mitgeliefertes RustFS, Standard seit v0.89) bzw. `minio_data` (mitgeliefertes MinIO, ältere Installationen) – leer, wenn externes S3 genutzt wird.
 - Container-Images – kommen aus der Registry.
 
 ---

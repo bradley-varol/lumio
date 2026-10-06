@@ -2,7 +2,7 @@
 
 # Storage
 
-Lumio nutzt S3-kompatiblen Object-Storage für alle Foto- und Video-Dateien. Standard-Setup ist **MinIO im selben Compose-Stack** – funktioniert sofort, ohne externes Konto.
+Lumio nutzt S3-kompatiblen Object-Storage für alle Foto- und Video-Dateien. Standard-Setup ist der **mitgelieferte Speicher im selben Compose-Stack** (RustFS) – funktioniert sofort, ohne externes Konto.
 
 Sobald du Skalierungs- oder Backup-Anforderungen hast, lohnt sich der Wechsel zu externem S3.
 
@@ -10,12 +10,85 @@ Sobald du Skalierungs- oder Backup-Anforderungen hast, lohnt sich der Wechsel zu
 
 | Setup | Wann |
 |---|---|
-| **MinIO (Default)** | Single-Studio, <500 GB Daten, ein Server |
+| **Mitgelieferter Speicher (Default)** | Single-Studio, <500 GB Daten, ein Server |
 | **Hetzner Object Storage** | Server auch bei Hetzner, DSGVO wichtig, <10 TB |
 | **Cloudflare R2** | CDN-Setup, viel öffentlicher Traffic, Egress sparen |
 | **Backblaze B2** | Sehr günstig pro TB, große Mengen, Archiv-Charakter |
 | **Wasabi** | Pauschalpreis, vorhersehbare Kosten, keine API-Calls-Limits |
 | **AWS S3** | Multi-Region, Enterprise-Compliance |
+
+---
+
+## Mitgelieferter Speicher: RustFS oder MinIO
+
+Lumio bringt einen eigenen S3-Speicher mit, damit es ohne externes Konto läuft. Seit v0.89 ist das **RustFS**. Installationen von vor v0.89 nutzen **MinIO** und bleiben dabei, bis du selbst umziehst.
+
+### Welchen nutze ich?
+
+Schau in deine `.env`:
+
+```bash
+grep COMPOSE_FILE .env
+```
+
+- Zeigt `COMPOSE_FILE=docker-compose.yml:docker-compose.rustfs.yml` → **RustFS**.
+- Zeigt nichts → **MinIO**. Alles läuft weiter wie bisher, ein Umzug ist freiwillig.
+
+In beiden Fällen heißt der Service in Compose `minio`. So bleiben `S3_ENDPOINT=http://minio:9000`, Caddy und alle Befehle gleich, nur das Programm darin ist ein anderes.
+
+### Muss ich umziehen?
+
+Nein. MinIO läuft weiter mit einem festen Image, das das Projekt pflegt. MinIO selbst wird aber nicht mehr als Open Source weiterentwickelt, deshalb empfehlen wir den Umzug, wenn es passt. Er braucht einen Befehl und ein paar Minuten Ausfallzeit.
+
+### Umzug von MinIO auf RustFS
+
+Vorher: Lumio aktualisieren (`git pull`, dann wie gewohnt `docker compose up -d`) und ein Backup machen (siehe [Backup](BACKUP.de.md)).
+
+Dann im Lumio-Ordner:
+
+```bash
+./scripts/migrate-minio-to-rustfs.sh
+```
+
+Das Skript
+
+1. stoppt API, Worker und Frontend, damit während der Kopie nichts hochgeladen wird,
+2. startet RustFS mit einem neuen, leeren Volume (`rustfs_data`),
+3. kopiert alle Dateien aus MinIO und prüft, dass Anzahl und Größe übereinstimmen,
+4. trägt die `COMPOSE_FILE`-Zeile in deine `.env` ein (vorher wird eine Sicherung `.env.bak-<datum>` angelegt),
+5. startet Lumio wieder, jetzt mit RustFS.
+
+Geht unterwegs etwas schief, wird nichts umgestellt, und Lumio läuft nach `docker compose up -d` wieder mit MinIO.
+
+Danach eine Galerie öffnen und ein Testbild hochladen.
+
+**Was nicht mitkommt:** Umgezogen werden nur die aktuellen Dateien. Ältere Versionen und gelöschte Dateien, die über Bucket-Versioning noch wiederherstellbar wären, bleiben in MinIO. Wer etwas vor dem Umzug Gelöschtes zurückholen muss, macht das vorher oder behält das alte MinIO-Volume, bis alles sicher ist.
+
+**Deine MinIO-Daten bleiben unverändert** im Volume `<projekt>_minio_data` (meist `lumio_minio_data`). Wenn alles läuft, kannst du es löschen:
+
+```bash
+docker volume rm lumio_minio_data
+```
+
+**Zurück zu MinIO:** die `COMPOSE_FILE`-Zeile aus der `.env` entfernen, dann `docker compose up -d`. Dateien, die unter RustFS hochgeladen wurden, sind dann nicht in MinIO.
+
+### Wenn du Compose mit eigenen `-f`-Dateien startest
+
+Mit `-f` auf der Kommandozeile ignoriert Compose die `COMPOSE_FILE`-Zeile aus der `.env`. Dann `-f docker-compose.rustfs.yml` direkt hinter `-f docker-compose.yml` ergänzen, zum Beispiel:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.rustfs.yml -f docker-compose.ml.yml up -d
+```
+
+Vergisst du es, startet MinIO absichtlich nicht, und das Log sagt, was zu tun ist. So landen neue Dateien nie im falschen, leeren Speicher.
+
+### Eigener Ordner statt Docker-Volume
+
+RustFS läuft als Benutzer `10001`, nicht als root. Wer statt des Volumes `rustfs_data` einen Host-Ordner einbindet, gibt ihn einmalig frei:
+
+```bash
+sudo chown -R 10001:10001 /pfad/zum/ordner
+```
 
 ---
 
@@ -202,19 +275,21 @@ IAM-Policy für den User: mindestens `s3:GetObject`, `s3:PutObject`, `s3:DeleteO
 
 ---
 
-## Migration von MinIO zu externem S3
+## Migration vom mitgelieferten Speicher zu externem S3
 
-Wenn du MinIO im Live-Betrieb hast und umziehen willst:
+Wenn du den mitgelieferten Speicher im Live-Betrieb hast und umziehen willst:
 
 ```bash
-# In den MinIO-Container, mc ist schon drin
-docker compose exec minio mc alias set src http://localhost:9000 <minio-key> <minio-secret>
-docker compose exec minio mc alias set dst https://<external-endpoint> <ext-key> <ext-secret>
-
-docker compose exec minio mc mirror --overwrite src/lumio dst/lumio-prod
+# Der Service minio_init hat den MinIO-Client (mc) und hängt im Lumio-Netz
+docker compose run --rm --entrypoint sh minio_init -c '
+  mc alias set src http://minio:9000 <speicher-key> <speicher-secret> &&
+  mc alias set dst https://<externer-endpoint> <ext-key> <ext-secret> &&
+  mc mirror --overwrite src/lumio dst/lumio-prod'
 ```
 
-Während der Migration kann Lumio weiterlaufen. Nach Abschluss `.env` auf den neuen Provider umstellen, `docker compose restart api worker`. MinIO-Container kann dann gestoppt werden.
+Das funktioniert gleich für mitgeliefertes RustFS und mitgeliefertes MinIO.
+
+Während der Migration kann Lumio weiterlaufen. Nach Abschluss `.env` auf den neuen Provider umstellen, `docker compose restart api worker`. Der Speicher-Container kann dann gestoppt werden.
 
 Bei großen Datenmengen besser `rclone` auf dem Host: parallelisierbar, resume-fähig.
 

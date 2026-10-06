@@ -320,8 +320,24 @@ services:
     user: "0:0"
     container_name: lumio_minio
     restart: unless-stopped
-    command: server /data --console-address ":9001"
+    # Schutz gegen den falschen Speicher: Steht in der .env, dass diese
+    # Installation RustFS nutzt (COMPOSE_FILE mit docker-compose.rustfs.yml),
+    # Compose wurde aber ohne diese Datei gestartet (z.B. mit eigenen -f), dann
+    # startet MinIO NICHT. Sonst würden neue Dateien unbemerkt im falschen,
+    # leeren Speicher landen. Lösung steht in der Fehlermeldung im Log.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        case "$$LUMIO_COMPOSE_FILE" in
+          *docker-compose.rustfs.yml*)
+            echo "FEHLER / ERROR: Diese Installation nutzt RustFS (COMPOSE_FILE in .env), Compose wurde aber ohne docker-compose.rustfs.yml gestartet."
+            echo "This installation uses RustFS (COMPOSE_FILE in .env), but Compose was started without docker-compose.rustfs.yml."
+            echo "Fix: run plain 'docker compose ...' without -f, or add '-f docker-compose.rustfs.yml' right after '-f docker-compose.yml'. See docs/STORAGE.md."
+            exit 1;;
+        esac
+        exec minio server /data --console-address ":9001"
     environment:
+      - LUMIO_COMPOSE_FILE=${COMPOSE_FILE:-}
       - MINIO_ROOT_USER=${S3_ACCESS_KEY}
       - MINIO_ROOT_PASSWORD=${S3_SECRET_KEY}
       # CORS für Browser-Upload — siehe docs/DEVELOPMENT.md

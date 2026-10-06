@@ -29,7 +29,7 @@ Three typical setups — the Quick Start below covers the first; everything else
 
 | You are… | Setup | Docs |
 |---|---|---|
-| **Photographer or studio** | Single mode, MinIO, one domain | [Quick Start](#quick-start) — 5 minutes |
+| **Photographer or studio** | Single mode, bundled storage, one domain | [Quick Start](#quick-start) — 5 minutes |
 | **Agency with several photographer clients** (self-hosted, for your own business) | Multi mode without billing, tenants created manually via super admin | [docs/MULTI_TENANT.md](docs/MULTI_TENANT.md) |
 
 In **single mode** the tenant is created automatically on first start — you only need `create-admin` for your first user. No super admin, no Stripe.
@@ -46,7 +46,7 @@ In **single mode** the tenant is created automatically on first start — you on
 - 💬 **Proofing** — Likes, color tags, star ratings, comments, drawn annotations on photo **and video** (time-anchored), team voting
 - 🎨 **Whitelabel** — Logo, colors, custom domains per studio or gallery
 - 🔐 **Secure** — Signed URLs, Argon2 passwords, audit log
-- ☁️ **Storage-flexible** — MinIO, S3, R2, B2, Wasabi, Hetzner Object Storage
+- ☁️ **Storage-flexible** — bundled RustFS, S3, R2, B2, Wasabi, Hetzner Object Storage
 - 🐳 **Docker-first** — `docker compose up` and it runs
 
 The studio — manage galleries, smart collections, tag filters, team proofing:
@@ -130,7 +130,7 @@ sed -i "s|^S3_SECRET_KEY=.*|S3_SECRET_KEY=$(openssl rand -base64 32 | tr -d '/+=
 docker compose up -d
 ```
 
-This builds the containers and starts Postgres, Redis, MinIO, API, frontend, worker and Caddy. The first start takes 3–5 min (build + DB migration).
+This builds the containers and starts Postgres, Redis, the bundled S3 storage (RustFS), API, frontend, worker and Caddy. The first start takes 3–5 min (build + DB migration).
 
 Check status:
 
@@ -140,7 +140,7 @@ docker compose ps
 
 All services should be `running` (healthy).
 
-> **Cloud firewall note:** open ports **80** (app) and **9000** (MinIO —
+> **Cloud firewall note:** open ports **80** (app) and **9000** (S3 storage —
 > the browser uploads and loads images directly from object storage).
 > Without 9000, uploads fail immediately.
 
@@ -179,7 +179,7 @@ After logging in you'll find gallery creation in the top left. Upload a photo, s
   a plain `up -d` keeps running the old ones. Details: [docs/SELFHOSTING.md](docs/SELFHOSTING.md#updates)
 
 - **Attach your own domain** → [docs/SELFHOSTING.md](docs/SELFHOSTING.md) (15-min setup with HTTPS)
-- **Images disappear on container restart?** → MinIO stores data in the `minio_data` volume, which persists. Just make sure you don't accidentally `docker volume rm` it.
+- **Images disappear on container restart?** → The bundled storage keeps its data in the `rustfs_data` volume (installations from before v0.89: `minio_data`), which persists. Just make sure you don't accidentally `docker volume rm` it.
 - **Set up backups** → [docs/BACKUP.md](docs/BACKUP.md)
 - **Something going wrong?** → [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 
@@ -223,7 +223,7 @@ All optional. The Quick Start above is enough for a single studio.
 | AI auto-tagging (CLIP) | [docs/ML.md](docs/ML.md) |
 | Tenant subdomains via wildcard cert | [docs/WILDCARD.md](docs/WILDCARD.md) |
 | Distribute load across multiple servers | [docs/SCALING.md](docs/SCALING.md) |
-| External S3 instead of MinIO (R2, B2, Hetzner, Wasabi) | [docs/STORAGE.md](docs/STORAGE.md) |
+| External S3 instead of the bundled storage (R2, B2, Hetzner, Wasabi) | [docs/STORAGE.md](docs/STORAGE.md) |
 | Backups, migrations, re-queue | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
 | Contributing / development | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
 

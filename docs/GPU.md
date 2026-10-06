@@ -55,6 +55,8 @@ docker compose \
   up -d
 ```
 
+> **Bundled RustFS?** If your `.env` contains `COMPOSE_FILE=…docker-compose.rustfs.yml` (the default since v0.89), add `-f docker-compose.rustfs.yml` right after `-f docker-compose.yml`. See [Storage](STORAGE.md#bundled-storage-rustfs-or-minio).
+
 On worker start the log should show:
 
 ```

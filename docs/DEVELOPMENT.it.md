@@ -202,14 +202,14 @@ Se uno di questi passaggi va storto, `docker compose logs --tail=80 api worker` 
 Fai il backup almeno di questi due volume:
 
 - `postgres_data` — metadati (utenti, gallerie, record dei file, sessioni)
-- `minio_data` — tutti i file immagine/video
+- `rustfs_data` — tutti i file immagine/video (`minio_data` nelle installazioni precedenti alla v0.89)
 
 Esempio con `restic` per un backup giornaliero di entrambi:
 
 ```bash
 docker run --rm \
     --volumes-from lumio_postgres \
-    --volumes-from lumio_minio \
+    --volumes-from "$(docker compose ps -q minio)" \
     -e RESTIC_REPOSITORY=... -e RESTIC_PASSWORD=... \
     restic/restic backup /var/lib/postgresql/data /data
 ```
@@ -287,6 +287,8 @@ docker compose \
     -f docker-compose.prod.yml \
     up -d
 ```
+
+> **RustFS incluso?** Se il tuo `.env` contiene `COMPOSE_FILE=…docker-compose.rustfs.yml` (predefinito dalla v0.89), aggiungi `-f docker-compose.rustfs.yml` subito dopo `-f docker-compose.yml`. Vedi [Storage](STORAGE.it.md#storage-incluso-rustfs-o-minio).
 
 Selezione del tag tramite la variabile d'ambiente `LUMIO_TAG`:
 

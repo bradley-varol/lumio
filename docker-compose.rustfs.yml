@@ -1,0 +1,76 @@
+# =============================================================================
+# Lumio — RustFS als mitgelieferter Speicher (statt MinIO)
+# =============================================================================
+#
+# Diese Datei ersetzt den mitgelieferten MinIO-Container durch RustFS
+# (Apache-2.0, S3-kompatibel). Sie wird NICHT von Hand aufgerufen: neue
+# Installationen bekommen sie über die Zeile
+#
+#     COMPOSE_FILE=docker-compose.yml:docker-compose.rustfs.yml
+#
+# in der .env (steht so in .env.example). Docker Compose liest beide Dateien
+# dann bei JEDEM `docker compose ...`-Befehl automatisch.
+#
+# Bestehende Installationen ohne diese Zeile laufen unverändert mit MinIO
+# weiter. Umzug von MinIO auf RustFS: docs/STORAGE.md, Abschnitt
+# "Moving from MinIO to RustFS".
+#
+# Warum der Service weiter "minio" heißt: API, Worker, Caddy und S3_ENDPOINT
+# (http://minio:9000) sprechen ihn unter diesem Namen an. So bleibt alles
+# andere gleich; nur was im Container läuft, ist ein anderes Programm.
+#
+# Wer externes S3 nutzt (Hetzner, R2, AWS, B2, ...), braucht diese Datei nicht.
+# =============================================================================
+
+services:
+  minio:
+    # Offizielles RustFS-Image von GHCR (identischer Digest wie auf Docker Hub,
+    # aber ohne dessen Pull-Limits), fest gepinnt. Update = bewusster Commit.
+    image: ghcr.io/rustfs/rustfs:1.0.1@sha256:1803faef57627e2d9c2e7d89d655d712ddded5389040054987163043fecb6a3c
+    container_name: lumio_rustfs
+    # RustFS läuft als eigener Benutzer (UID 10001), nicht als root. Das
+    # benannte Volume unten übernimmt die Rechte aus dem Image automatisch.
+    # Nur wer stattdessen ein Host-Verzeichnis einbindet, muss es einmalig
+    # mit `chown -R 10001:10001 <verzeichnis>` freigeben.
+    user: "10001:10001"
+    # Start wie im RustFS-Image vorgesehen (die MinIO-Startzeile aus
+    # docker-compose.yml gilt hier nicht).
+    entrypoint: ["/entrypoint.sh"]
+    command: []
+    environment:
+      - RUSTFS_ACCESS_KEY=${S3_ACCESS_KEY}
+      - RUSTFS_SECRET_KEY=${S3_SECRET_KEY}
+      - RUSTFS_VOLUMES=/data
+      - RUSTFS_CONSOLE_ENABLE=true
+    volumes:
+      # Eigenes Volume: die MinIO-Daten (minio_data) bleiben unangetastet
+      # liegen, falls man zurück will oder noch umziehen muss.
+      - rustfs_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio_init:
+    # Gleicher MinIO-Client wie bisher, er spricht S3 und funktioniert mit
+    # RustFS genauso. Zusätzlich zu Bucket + "privat":
+    #   - CORS am Bucket, damit Browser direkt hochladen können (RustFS hat
+    #     dafür keinen globalen Schalter wie MinIO; die Sicherheit liegt wie
+    #     immer in den signierten, kurzlebigen Upload-URLs)
+    #   - Lifecycle-Regel, die abgebrochene Multipart-Uploads nach 7 Tagen
+    #     wegräumt (unter MinIO ging das nicht)
+    # Idempotent: läuft bei jedem Start durch, ohne etwas kaputt zu machen.
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $$S3_ACCESS_KEY $$S3_SECRET_KEY &&
+      mc mb local/$$S3_BUCKET --ignore-existing &&
+      mc anonymous set none local/$$S3_BUCKET &&
+      printf '%s' '<CORSConfiguration><CORSRule><AllowedOrigin>*</AllowedOrigin><AllowedMethod>GET</AllowedMethod><AllowedMethod>PUT</AllowedMethod><AllowedMethod>HEAD</AllowedMethod><AllowedMethod>POST</AllowedMethod><AllowedHeader>*</AllowedHeader><ExposeHeader>ETag</ExposeHeader></CORSRule></CORSConfiguration>' > /tmp/cors.xml &&
+      mc cors set local/$$S3_BUCKET /tmp/cors.xml &&
+      printf '%s' '{\"Rules\":[{\"ID\":\"abort-incomplete-multipart\",\"Status\":\"Enabled\",\"Filter\":{\"Prefix\":\"\"},\"AbortIncompleteMultipartUpload\":{\"DaysAfterInitiation\":7}}]}' | mc ilm import local/$$S3_BUCKET &&
+      echo 'RustFS bucket initialized: '$$S3_BUCKET
+      "
+
+volumes:
+  rustfs_data:

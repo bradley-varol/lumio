@@ -29,6 +29,19 @@ Changes werden trotzdem klar als solche markiert. Details: `docs/VERSIONING.md`.
 
 ## [Unreleased]
 
+A pull is enough. **Existing installations keep running on MinIO, nothing changes for them.** Only new installations (those that create their `.env` from `.env.example` from now on) start with RustFS. Installations with external S3 (Hetzner, R2, AWS, B2 …) are not affected either way.
+
+### Added
+
+- **RustFS as the bundled storage for new installations.** MinIO is no longer developed as open source; RustFS (Apache-2.0) takes its place in the Compose stack. New installations get it through one line in `.env.example` (`COMPOSE_FILE=docker-compose.yml:docker-compose.rustfs.yml`), so the usual `docker compose` commands stay the same. The service keeps its name `minio`, so `S3_ENDPOINT`, Caddy and all commands are unchanged. Tested against everything Lumio needs: browser uploads with CORS, multipart uploads, processing, deleting galleries, versioning for restoring deleted galleries.
+- **Moving an existing installation from MinIO to RustFS is optional and takes one command:** `./scripts/migrate-minio-to-rustfs.sh`. It stops Lumio, copies all files, checks number and size, switches `.env` (with a backup) and starts Lumio on RustFS. The MinIO data stays untouched, so going back is possible. Step by step, including what does not move (older file versions): `docs/STORAGE.md`, "Bundled storage: RustFS or MinIO".
+- With RustFS, the bucket also gets a rule that clears out aborted multipart uploads after 7 days (MinIO did not support it).
+
+### Changed
+
+- Protection against the wrong storage: if `.env` says the installation uses RustFS but Compose is started without `docker-compose.rustfs.yml` (for example with your own `-f` files), MinIO refuses to start and its log explains what to add. Without this, new files would land unnoticed in an empty storage. If you start Compose with `-f`, add `-f docker-compose.rustfs.yml` right after `-f docker-compose.yml` — only once you use RustFS.
+- Docs: the commands for copying from the bundled storage to external S3 and the CORS troubleshooting tip were outdated (the server image has no `mc`, and the tip made the bucket public). Both now use the `minio_init` service and keep the bucket private.
+
 ## [0.88.1] - 2026-10-06
 
 A pull is enough. Only installations using the bundled MinIO are affected; the next `docker compose pull` fetches the new image, data and volume stay as they are. External S3 (Hetzner, R2, AWS, B2 …) is not affected.

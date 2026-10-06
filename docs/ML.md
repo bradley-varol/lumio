@@ -50,6 +50,8 @@ docker compose \
   up -d --build worker
 ```
 
+> **Bundled RustFS?** If your `.env` contains `COMPOSE_FILE=…docker-compose.rustfs.yml` (the default since v0.89), add `-f docker-compose.rustfs.yml` right after `-f docker-compose.yml`. See [Storage](STORAGE.md#bundled-storage-rustfs-or-minio).
+
 This swaps the standard worker for one with PyTorch + open_clip_torch. On first start the worker downloads the CLIP model from HuggingFace (~150 MB), which is cached in `lumio_model_cache`.
 
 Check status:

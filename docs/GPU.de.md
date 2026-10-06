@@ -61,6 +61,8 @@ docker compose \
   up -d
 ```
 
+> **Mitgeliefertes RustFS?** Steht in deiner `.env` `COMPOSE_FILE=…docker-compose.rustfs.yml` (Standard seit v0.89), dann `-f docker-compose.rustfs.yml` direkt hinter `-f docker-compose.yml` ergänzen. Siehe [Storage](STORAGE.de.md#mitgelieferter-speicher-rustfs-oder-minio).
+
 Beim Worker-Start sollte im Log auftauchen:
 
 ```

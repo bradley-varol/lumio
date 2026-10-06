@@ -263,7 +263,7 @@ Se funziona, in un disastro reale sei di nuovo online in ~1 ora.
   sistema si avvia comunque pulito.
 - `caddy_data` – certificati TLS, Caddy li riscarica automaticamente
   (attento solo al rate limit di Let's Encrypt).
-- `minio_data` – vuoto quando si usa S3 esterno.
+- `rustfs_data` (RustFS incluso, predefinito dalla v0.89) o `minio_data` (MinIO incluso, installazioni precedenti) – vuoto quando si usa S3 esterno.
 - Immagini dei container – arrivano dal registry.
 
 ---

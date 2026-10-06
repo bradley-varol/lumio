@@ -129,11 +129,13 @@ docker run --rm \
   --cors-configuration file:///path/to/cors.json
 ```
 
-**Bei MinIO** ist CORS standardmäßig permissiv und sollte einfach funktionieren. Wenn nicht, im MinIO Container:
+**Beim mitgelieferten Speicher** (RustFS oder MinIO) richtet der Service `minio_init` CORS beim Start automatisch ein. Schlagen Uploads trotzdem fehl, die Einrichtung erneut laufen lassen und das Log lesen:
 
 ```bash
-docker compose exec minio mc anonymous set download local/lumio
+docker compose up minio_init
 ```
+
+Den Bucket nicht öffentlich machen, um das zu umgehen: Lumio gibt immer nur signierte, kurzlebige Links heraus.
 
 ### "S3 connection refused" / Upload-Init schlägt fehl
 

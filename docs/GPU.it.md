@@ -55,6 +55,8 @@ docker compose \
   up -d
 ```
 
+> **RustFS incluso?** Se il tuo `.env` contiene `COMPOSE_FILE=…docker-compose.rustfs.yml` (predefinito dalla v0.89), aggiungi `-f docker-compose.rustfs.yml` subito dopo `-f docker-compose.yml`. Vedi [Storage](STORAGE.it.md#storage-incluso-rustfs-o-minio).
+
 All'avvio del worker il log dovrebbe mostrare:
 
 ```

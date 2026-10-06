@@ -29,6 +29,8 @@ Changes werden trotzdem klar als solche markiert. Details: `docs/VERSIONING.md`.
 
 ## [Unreleased]
 
+## [0.88.0] - 2026-10-06
+
 A pull is enough. Frontend and API are affected, so only the main server. The database migration (new tables for pages) runs automatically on deploy. Nothing changes until a studio creates a page.
 
 ### Added

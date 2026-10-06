@@ -117,7 +117,7 @@ export async function registerAnalyticsRoutes(app: FastifyInstance) {
           where: {
             tenantId,
             createdAt: { gte: since },
-            status: { in: ["paid", "in_production", "shipped", "delivered"] },
+            status: { in: ["paid", "confirmed", "in_production", "shipped", "delivered"] },
           },
         }),
 
@@ -179,12 +179,13 @@ export async function registerAnalyticsRoutes(app: FastifyInstance) {
           LIMIT 5
         `,
 
-        // Print-Shop-Revenue (Brutto-Total von paid+ Orders)
+        // Print-Shop-Revenue (Brutto-Total von bezahlten Orders: paidAt gesetzt)
         prisma.printOrder.aggregate({
           where: {
             tenantId,
             createdAt: { gte: since },
-            status: { in: ["paid", "in_production", "shipped", "delivered"] },
+            paidAt: { not: null },
+            status: { in: ["paid", "confirmed", "in_production", "shipped", "delivered"] },
           },
           _sum: { totalCents: true },
         }),
@@ -330,7 +331,7 @@ export async function registerAnalyticsRoutes(app: FastifyInstance) {
             where: {
               galleryId,
               createdAt: { gte: since },
-              status: { in: ["paid", "in_production", "shipped", "delivered"] },
+              status: { in: ["paid", "confirmed", "in_production", "shipped", "delivered"] },
             },
           }),
         ]);

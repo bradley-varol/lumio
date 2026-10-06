@@ -29,6 +29,18 @@ Changes werden trotzdem klar als solche markiert. Details: `docs/VERSIONING.md`.
 
 ## [Unreleased]
 
+A pull is enough — the database migrates automatically on start (one new column). Only the main server is affected.
+
+### Added
+
+- Print shop: **pay on delivery, allowed by the studio per order.** Customers still pay upfront (Stripe or invoice). On an order that is waiting for payment, the studio can choose *Allow pay on delivery*: the order becomes **Confirmed**, an open Stripe payment is cancelled so the customer can no longer pay online (the action is refused if the payment just went through), and the studio takes it from there — production and shipping are never started automatically. When the money has been collected the studio records it with *Record payment* (cash, card terminal or bank transfer, plus an optional reference), which sends the customer the payment-received email. The order list marks such orders "To collect", an order that was never paid cannot be refunded, and marking one delivered without a recorded payment asks for confirmation. The customer's order page shows the amount due on delivery.
+- Print shop: the customer now also gets an email when the order is **received**, before it is paid.
+
+### Changed
+
+- Print shop emails: the studio's "new order" email goes out when an **invoice order** is created, and when an **online (Stripe) order is paid** — not at creation, so checkouts abandoned at the payment step do not notify the studio. The "payment received" email now goes to the customer only, and no longer says the order goes into production for a pay-on-delivery order.
+- Analytics: the print-shop revenue only counts orders that have actually been paid (`paidAt` set); confirmed pay-on-delivery orders count as orders but not as revenue until collected.
+
 ## [0.86.0] - 2026-10-05
 
 A pull is enough — the database migrates automatically on start. Only the main server is affected. **The print-shop checkout asks for more than before** — see below.

@@ -29,6 +29,8 @@ Changes werden trotzdem klar als solche markiert. Details: `docs/VERSIONING.md`.
 
 ## [Unreleased]
 
+## [0.87.0] - 2026-10-06
+
 A pull is enough — the database migrates automatically on start (one new column). Only the main server is affected.
 
 ### Added

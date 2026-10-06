@@ -12,16 +12,16 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import {
   api,
   ApiError,
+  type PublicGalleryMeta,
   type PublicLandingPage,
   type PublicPageCard,
 } from "@/lib/api";
-import { GalleryShell, isLightColor } from "@/components/gallery/GalleryShell";
+import { GalleryShell } from "@/components/gallery/GalleryShell";
+import { GalleryHero } from "@/components/gallery/GalleryHero";
 import { useFormat, useT } from "@/lib/i18n";
 
 /** Height of a card's picture. Width follows the aspect ratio, like the
@@ -72,12 +72,23 @@ export function PublicPageView({ slug, initial }: Props) {
   }
 
   const { page, galleries } = data;
-  const light = isLightColor(page.branding?.primaryColor ?? "#0e0e10");
+  // The API always sends a header once the page is unlocked. The fallback only
+  // covers a page served by an older API during a rolling deploy.
+  const header = page.header ?? (page.locked ? null : defaultHeader(page.introMarkdown));
 
   return (
     <GalleryShell
       branding={page.branding}
       faviconUrl={page.faviconUrl}
+      overrides={{
+        colorBackground: page.colors?.background ?? null,
+        colorAccent: page.colors?.accent ?? null,
+        footerMarkdown: page.footerMarkdown ?? null,
+        fontHeading: page.fonts?.heading ?? null,
+        fontBody: page.fonts?.body ?? null,
+        // The page logo sits in the header: no second logo strip above it.
+        hideHeaderLogo: !!header?.eventLogoUrl,
+      }}
       footerExtra={
         page.isDefault ? (
           <Link href="/login" className="hover:underline shrink-0">
@@ -86,71 +97,147 @@ export function PublicPageView({ slug, initial }: Props) {
         ) : null
       }
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 pt-12 sm:pt-16 pb-6">
-        <header className="mb-10">
-          <h1 className="text-display-lg sm:text-display-xl font-medium tracking-tight text-center">
-            {page.title}
-          </h1>
-          {page.introMarkdown && (
-            <div
-              className={`mx-auto mt-5 max-w-2xl text-center prose ${
-                light ? "" : "prose-invert"
-              } prose-sm sm:prose-base`}
-            >
-              {/* The page title is the h1: headings in the intro start at h2. */}
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                skipHtml
-                components={{ h1: "h2" }}
-              >
-                {page.introMarkdown}
-              </ReactMarkdown>
-            </div>
-          )}
-        </header>
-
-        {page.locked ? (
-          <UnlockForm slug={slug} onUnlocked={load} />
-        ) : galleries.length === 0 ? (
-          <p
-            className="text-center text-ui py-16"
-            style={{ color: "var(--brand-fg-subtle)" }}
-          >
-            {t("publicPage.empty")}
-          </p>
+      {page.locked ? (
+        header ? (
+          // The studio chose to show header image, logo and title before
+          // unlocking: the password field sits where the button would.
+          <GalleryHero meta={{ title: page.title, header, demoteWelcomeHeadings: true }}>
+            <UnlockForm slug={slug} onUnlocked={load} />
+          </GalleryHero>
         ) : (
-          <div className="flex flex-wrap gap-x-3 gap-y-8">
-            {galleries.map((card) => (
-              <Card key={card.slug} card={card} />
-            ))}
-            {/* Keeps the last row from stretching across the full width: it
-                takes almost all of the free space there. */}
-            <i className="block" style={{ flexGrow: 10000 }} aria-hidden="true" />
+          <div className="min-h-[70vh] flex items-center justify-center px-4 py-16">
+            <UnlockForm slug={slug} onUnlocked={load} />
           </div>
-        )}
-      </div>
+        )
+      ) : (
+        <>
+          {header && (
+            <GalleryHero meta={{ title: page.title, header, demoteWelcomeHeadings: true }}>
+              {page.cta && <CtaButton cta={page.cta} />}
+            </GalleryHero>
+          )}
+          {galleries.length === 0 ? (
+            <p
+              className="text-center text-ui py-16 px-4"
+              style={{ color: "var(--brand-fg-subtle)" }}
+            >
+              {t("publicPage.empty")}
+            </p>
+          ) : (
+            <GalleryList
+              cards={galleries}
+              display={page.display ?? DEFAULT_DISPLAY}
+            />
+          )}
+        </>
+      )}
     </GalleryShell>
+  );
+}
+
+const DEFAULT_DISPLAY: PublicLandingPage["page"]["display"] = {
+  layout: "grid",
+  titleOnImage: false,
+  showDate: true,
+  showCount: true,
+};
+
+function defaultHeader(intro: string | null): PublicGalleryMeta["header"] {
+  return {
+    layout: "minimal",
+    heroImageUrl: null,
+    overlayColor: null,
+    overlayBlur: null,
+    backgroundColor: null,
+    eventLogoUrl: null,
+    eventLogoSize: "medium",
+    welcomeMarkdown: intro,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Header button
+// ---------------------------------------------------------------------------
+function CtaButton({ cta }: { cta: { label: string; url: string } }) {
+  const external = /^https?:\/\//i.test(cta.url);
+  return (
+    <div className="mt-8">
+      <a
+        href={cta.url}
+        {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+        className="inline-flex items-center gap-2 h-11 px-6 rounded-full bg-brand-accent text-brand-accent-contrast text-ui font-medium hover:opacity-90 transition-opacity duration-motion"
+        style={{ textShadow: "none" }}
+      >
+        {cta.label}
+        <span aria-hidden="true">→</span>
+      </a>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The galleries: grid, editorial or bands
+// ---------------------------------------------------------------------------
+type Display = PublicLandingPage["page"]["display"];
+
+function GalleryList({ cards, display }: { cards: PublicPageCard[]; display: Display }) {
+  if (display.layout === "bands") {
+    // Full width, one gallery per band.
+    return (
+      <div className="pt-10 sm:pt-14 pb-6 flex flex-col gap-4 sm:gap-6">
+        {cards.map((card) => (
+          <Card key={card.slug} card={card} display={display} variant="band" />
+        ))}
+      </div>
+    );
+  }
+  if (display.layout === "editorial") {
+    // The first gallery large across the full width, the others in columns.
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 pt-10 sm:pt-14 pb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-9">
+        {cards.map((card, i) => (
+          <Card
+            key={card.slug}
+            card={card}
+            display={display}
+            variant={i === 0 ? "lead" : "column"}
+          />
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-12 pt-10 sm:pt-14 pb-6 flex flex-wrap gap-x-3 gap-y-8">
+      {cards.map((card) => (
+        <Card key={card.slug} card={card} display={display} variant="row" />
+      ))}
+      {/* Keeps the last row from stretching across the full width: it
+          takes almost all of the free space there. */}
+      <i className="block" style={{ flexGrow: 10000 }} aria-hidden="true" />
+    </div>
   );
 }
 
 // ---------------------------------------------------------------------------
 // A gallery card
 // ---------------------------------------------------------------------------
-function Card({ card }: { card: PublicPageCard }) {
+type CardVariant = "row" | "lead" | "column" | "band";
+
+function Card({
+  card,
+  display,
+  variant,
+}: {
+  card: PublicPageCard;
+  display: Display;
+  variant: CardVariant;
+}) {
   const t = useT();
   const fmt = useFormat();
 
-  // Clamp so that a panorama or a very tall picture does not make a row
-  // absurdly wide or narrow.
-  const raw =
-    card.cover?.width && card.cover?.height
-      ? card.cover.width / card.cover.height
-      : PLACEHOLDER_RATIO;
-  const ratio = Math.min(2.4, Math.max(0.6, raw));
-
   const meta = [
-    fmt.date(card.createdAt),
-    card.fileCount !== null
+    display.showDate ? fmt.date(card.createdAt) : null,
+    display.showCount && card.fileCount !== null
       ? t(card.fileCount === 1 ? "pages.filesSg" : "pages.filesPl", {
           count: card.fileCount,
         })
@@ -159,19 +246,64 @@ function Card({ card }: { card: PublicPageCard }) {
     .filter(Boolean)
     .join(" · ");
 
+  // Picture size per variant. "row" is the justified grid: fixed height,
+  // width from the aspect ratio, clamped so that a panorama or a very tall
+  // picture does not make a row absurdly wide or narrow.
+  const raw =
+    card.cover?.width && card.cover?.height
+      ? card.cover.width / card.cover.height
+      : PLACEHOLDER_RATIO;
+  const ratio = Math.min(2.4, Math.max(0.6, raw));
+  const linkStyle: React.CSSProperties | undefined =
+    variant === "row"
+      ? // flex-grow is scaled up: with the sum of the grow factors of a row
+        // below 1, the browser hands out only that fraction of the free
+        // space, so a lone portrait card would not fill its row on a narrow
+        // screen.
+        { flexBasis: `${ROW_HEIGHT * ratio}px`, flexGrow: ratio * 100 }
+      : undefined;
+  const boxClass =
+    variant === "lead"
+      ? "aspect-[4/3] sm:aspect-[21/9] rounded"
+      : variant === "column"
+        ? "aspect-[4/5] rounded"
+        : variant === "band"
+          ? "aspect-[16/10] sm:aspect-[21/8]"
+          : "rounded";
+  const titleSize =
+    variant === "band"
+      ? "text-display sm:text-display-lg"
+      : variant === "lead"
+        ? "text-display-sm sm:text-display"
+        : "text-ui-lg";
+  const capPad = variant === "band" ? "px-4 sm:px-6 md:px-12" : "";
+  const over = display.titleOnImage;
+
+  const title = (
+    <div
+      className={`${titleSize} font-medium leading-tight ${over ? "" : "truncate"}`}
+      style={{ fontFamily: "var(--gallery-font-heading)" }}
+    >
+      {card.title}
+      {card.protected && (
+        <span className="sr-only"> ({t("publicPage.protectedLabel")})</span>
+      )}
+    </div>
+  );
+
   return (
     <Link
       href={`/g/${card.slug}`}
       prefetch={false}
-      className="group block"
-      // flex-grow is scaled up: with the sum of the grow factors of a row
-      // below 1, the browser hands out only that fraction of the free space,
-      // so a lone portrait card would not fill its row on a narrow screen.
-      style={{ flexBasis: `${ROW_HEIGHT * ratio}px`, flexGrow: ratio * 100 }}
+      className={`group block min-w-0 ${variant === "lead" ? "sm:col-span-2 lg:col-span-3" : ""}`}
+      style={linkStyle}
     >
       <div
-        className="relative overflow-hidden rounded"
-        style={{ height: ROW_HEIGHT, background: "var(--brand-surface)" }}
+        className={`relative overflow-hidden ${boxClass}`}
+        style={{
+          ...(variant === "row" ? { height: ROW_HEIGHT } : {}),
+          background: "var(--brand-surface)",
+        }}
       >
         {card.cover ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -179,11 +311,11 @@ function Card({ card }: { card: PublicPageCard }) {
             src={card.cover.url}
             alt=""
             loading="lazy"
-            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
           />
         ) : card.protected ? (
           <div
-            className="w-full h-full flex items-center justify-center"
+            className="absolute inset-0 flex items-center justify-center"
             style={{ color: "var(--brand-fg-subtle)" }}
           >
             <LockIcon className="w-10 h-10" />
@@ -197,27 +329,35 @@ function Card({ card }: { card: PublicPageCard }) {
             <LockIcon className="w-3.5 h-3.5" />
           </span>
         )}
-      </div>
-
-      <div className="pt-2.5 space-y-0.5">
-        <div className="text-ui font-medium truncate">
-          {card.title}
-          {card.protected && (
-            <span className="sr-only"> ({t("publicPage.protectedLabel")})</span>
-          )}
-        </div>
-        <div className="text-ui-xs" style={{ color: "var(--brand-fg-subtle)" }}>
-          {meta}
-        </div>
-        {card.description && (
-          <p
-            className="text-ui-xs line-clamp-2 leading-relaxed"
-            style={{ color: "var(--brand-fg-muted)" }}
+        {over && (
+          <div
+            className={`absolute inset-x-0 bottom-0 pt-14 pb-4 ${capPad || "px-4"} text-white space-y-0.5`}
+            style={{ background: "linear-gradient(180deg, transparent, rgba(10,10,10,0.72))" }}
           >
-            {card.description}
-          </p>
+            {title}
+            {meta && <div className="text-ui-xs text-white/80">{meta}</div>}
+          </div>
         )}
       </div>
+
+      {!over && (
+        <div className={`pt-2.5 space-y-0.5 ${capPad}`}>
+          {title}
+          {meta && (
+            <div className="text-ui-xs" style={{ color: "var(--brand-fg-subtle)" }}>
+              {meta}
+            </div>
+          )}
+          {card.description && (
+            <p
+              className="text-ui-xs line-clamp-2 leading-relaxed"
+              style={{ color: "var(--brand-fg-muted)" }}
+            >
+              {card.description}
+            </p>
+          )}
+        </div>
+      )}
     </Link>
   );
 }
@@ -273,11 +413,18 @@ function UnlockForm({
     }
   }
 
+  // Colours follow the surrounding text (currentColor), so the form reads on
+  // a light or dark page and on top of a header image alike.
+  const line = "color-mix(in srgb, currentColor 22%, transparent)";
   return (
-    <div className="flex justify-center py-8 animate-fade-in">
+    <div className="w-full max-w-md mt-8 animate-fade-in" style={{ textShadow: "none" }}>
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-md space-y-5 bg-white/[0.03] border border-white/10 rounded-md p-7 backdrop-blur"
+        className="w-full space-y-5 rounded-md p-7 backdrop-blur text-left"
+        style={{
+          border: `1px solid ${line}`,
+          background: "color-mix(in srgb, currentColor 5%, transparent)",
+        }}
       >
         <div className="text-ui-sm opacity-75">{t("publicPage.locked")}</div>
         <div className="space-y-1.5">
@@ -292,11 +439,12 @@ function UnlockForm({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder={t("gallery.passwordPlaceholder")}
-            className="w-full rounded bg-white/5 border border-white/15 hover:border-white/30 focus:border-brand-accent focus:bg-white/10 px-3 h-10 text-ui placeholder:opacity-40 focus:outline-none transition-colors duration-motion"
+            className="w-full rounded bg-transparent px-3 h-10 text-ui placeholder:opacity-50 focus:outline-none focus:ring-2 focus:ring-brand-accent transition-colors duration-motion"
+            style={{ border: `1px solid ${line}`, color: "inherit" }}
           />
         </div>
         {error && (
-          <div className="text-ui-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-sm px-3 py-2">
+          <div className="text-ui-sm text-red-600 bg-red-500/10 border border-red-500/30 rounded-sm px-3 py-2">
             {error}
           </div>
         )}

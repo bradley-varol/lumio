@@ -29,6 +29,13 @@ Changes werden trotzdem klar als solche markiert. Details: `docs/VERSIONING.md`.
 
 ## [Unreleased]
 
+### Added
+- **Pages: design options like galleries** (#65). The *Design* section of the page editor offers the gallery header (four layouts, header image, logo, overlay colour and blur, background colour), fonts, colours and a Markdown footer for a page. On top: how the galleries are shown (*Grid*, *Editorial*, *Bands*), title on the image or below it, date and photo count on or off, and an optional header button (e.g. "Book a session", linking to a website, `mailto:` or `tel:`). The header image can be uploaded or taken from a gallery on the page, but only from one without a password; this is checked on every visit. The header image is also the preview image when the page link is shared. Pages without these settings look as before.
+- **Password pages: "Show header before unlocking".** Off (default): visitors see only the password field (until now the title was shown above it). On: header image, logo and title above it; introduction, button and galleries only after unlocking.
+
+### Fixed
+- Galleries with the *Side by side* or *Centered* header (without background colour) on a light branding showed the welcome text in white, nearly invisible. It now takes the page's text colour.
+
 ## [0.89.0] - 2026-10-06
 
 A pull is enough. **Existing installations keep running on MinIO, nothing changes for them.** Only new installations (those that create their `.env` from `.env.example` from now on) start with RustFS. Installations with external S3 (Hetzner, R2, AWS, B2 …) are not affected either way.

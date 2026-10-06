@@ -30,8 +30,21 @@ import remarkGfm from "remark-gfm";
 import type { PublicGalleryMeta } from "@/lib/api";
 import { heroTextColor } from "@/lib/color";
 
+/**
+ * Was der Header braucht. Eine Galerie (PublicGalleryMeta) passt direkt;
+ * Landing Pages (Issue #65) bauen sich dasselbe aus ihren eigenen Feldern.
+ */
+export interface HeroMeta {
+  title: string;
+  description?: string | null;
+  header: PublicGalleryMeta["header"];
+  /** Ueberschriften im Willkommenstext eine Stufe tiefer (h1 -> h2), wenn
+   *  der Titel die einzige h1 der Seite sein soll (Pages). */
+  demoteWelcomeHeadings?: boolean;
+}
+
 interface Props {
-  meta: PublicGalleryMeta;
+  meta: HeroMeta;
   /** Inhalt-Suffix unter Titel/Welcome — typisch der Stats-Block. */
   children?: React.ReactNode;
 }
@@ -59,7 +72,7 @@ function overlayStyle(
   return s;
 }
 
-function heroTextStyle(meta: PublicGalleryMeta, sideBySide = false): React.CSSProperties {
+function heroTextStyle(meta: HeroMeta, sideBySide = false): React.CSSProperties {
   if (sideBySide) {
     // Side-by-Side hat keinen eigenen Backdrop — der Text steht auf der
     // normalen Galerie-Surface, dort sorgt der GalleryShell schon für
@@ -300,6 +313,7 @@ function CenteredHero({ meta, children }: Props) {
           maxWidth="2xl"
           align="center"
           toneOverride={bgTone ?? undefined}
+          sideBySide={!bgTone}
         />
         {children}
       </div>
@@ -368,7 +382,7 @@ function WelcomeBlock({
   sideBySide = false,
   toneOverride,
 }: {
-  meta: PublicGalleryMeta;
+  meta: HeroMeta;
   maxWidth: "md" | "2xl";
   align: "start" | "center";
   /** Side-by-Side hat keinen Backdrop → Tone wird vom Shell vererbt. */
@@ -384,6 +398,11 @@ function WelcomeBlock({
   // Prose-Tone: dunkel auf hellem Hero (helles Overlay/Bg) → normaler
   // prose, sonst prose-invert für hellen Text. Side-by-side hat keinen
   // eigenen Backdrop, dort vererben wir vom Shell.
+  // Without a backdrop of its own (side-by-side, centered without a
+  // background colour) the text sits on the shell surface: prose then takes
+  // the shell's text colour instead of assuming a dark hero (that made the
+  // welcome text white on light brandings).
+  const inherit = sideBySide && !toneOverride;
   let proseTone = "prose-invert";
   if (toneOverride) {
     proseTone = toneOverride === "dark" ? "" : "prose-invert";
@@ -396,12 +415,29 @@ function WelcomeBlock({
     if (tone === "dark") proseTone = "";
   }
 
+
+  const inheritStyle: React.CSSProperties | undefined = inherit
+    ? ({
+        "--tw-prose-body": "currentColor",
+        "--tw-prose-headings": "currentColor",
+        "--tw-prose-links": "currentColor",
+        "--tw-prose-bold": "currentColor",
+        "--tw-prose-bullets": "currentColor",
+        "--tw-prose-counters": "currentColor",
+        "--tw-prose-quotes": "currentColor",
+      } as React.CSSProperties)
+    : undefined;
   if (h.welcomeMarkdown) {
     return (
       <div
-        className={`prose ${proseTone} prose-sm sm:prose-base mt-4 ${widthClass} ${alignClass} opacity-90`}
+        className={`prose ${inherit ? "" : proseTone} prose-sm sm:prose-base mt-4 ${widthClass} ${alignClass} opacity-90`}
+        style={inheritStyle}
       >
-        <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          skipHtml
+          components={meta.demoteWelcomeHeadings ? { h1: "h2" } : undefined}
+        >
           {h.welcomeMarkdown}
         </ReactMarkdown>
       </div>

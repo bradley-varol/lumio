@@ -6,7 +6,9 @@
  * What goes into it follows what a visitor may see:
  *   - Only a public page is indexable. link_only and password are noindex.
  *   - A locked password page gives away its title and nothing else: no intro,
- *     no cover.
+ *     no cover. Its header image only if the studio shows the header before
+ *     unlocking anyway.
+ *   - Preview image: the page's header image, else the first gallery cover.
  */
 import type { Metadata } from "next";
 
@@ -44,7 +46,8 @@ export function buildPageMetadata(
       ? truncate(markdownToText(p.introMarkdown), 160) || undefined
       : undefined;
   const cover = !p.locked ? data.galleries.find((g) => g.cover)?.cover : null;
-  const image = cover ? fetchAssetAbsolute(cover.url, origin) : null;
+  const imageUrl = p.header?.heroImageUrl ?? cover?.url ?? null;
+  const image = imageUrl ? fetchAssetAbsolute(imageUrl, origin) : null;
 
   return {
     title,

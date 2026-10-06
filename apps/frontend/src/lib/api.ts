@@ -555,8 +555,56 @@ export interface StudioLandingPage {
   isStudioDefault: boolean;
   /** null = Standard-Branding des Studios. */
   brandingId: string | null;
+  design: LandingPageDesign;
+  /** Nur in GET /pages/:id: Vorschau-Links fuer den Editor. */
+  designPreview?: {
+    heroPreviewUrl: string | null;
+    /** Warum ein Galerie-Foto als Headerbild gerade NICHT gezeigt wird. */
+    heroFileProblem: "not_found" | "not_on_page" | "gallery_hidden" | "gallery_protected" | null;
+    logoPreviewUrl: string | null;
+  };
   createdAt: string;
   updatedAt: string;
+}
+
+export type HeroLayout = "minimal" | "splash" | "side_by_side" | "centered";
+export type PageGalleryLayout = "grid" | "editorial" | "bands";
+
+/** Gestaltung einer Page (Issue #65): Header wie bei Galerien plus
+ *  Galerie-Darstellung, Header-Button und Verhalten im gesperrten Zustand. */
+export interface LandingPageDesign {
+  heroLayout: HeroLayout;
+  heroFileId: string | null;
+  heroUrl: string | null;
+  heroOverlayColor: string | null;
+  heroOverlayBlur: number | null;
+  heroBackgroundColor: string | null;
+  eventLogoUrl: string | null;
+  eventLogoSize: "small" | "medium" | "large";
+  fontHeading: string | null;
+  fontBody: string | null;
+  colorBackground: string | null;
+  colorAccent: string | null;
+  footerMarkdown: string | null;
+  galleryLayout: PageGalleryLayout;
+  cardTitleOnImage: boolean;
+  cardShowDate: boolean;
+  cardShowCount: boolean;
+  ctaLabel: string | null;
+  ctaUrl: string | null;
+  showHeaderWhenLocked: boolean;
+}
+
+/** Fotos, die als Headerbild einer Page in Frage kommen. */
+export interface PageHeroCandidates {
+  galleries: {
+    galleryId: string;
+    title: string;
+    /** Sichtbar auf der Page und ohne Passwort. */
+    usable: boolean;
+    protected: boolean;
+    files: { id: string; filename: string; thumbUrl: string }[];
+  }[];
 }
 
 export interface StudioLandingPageListItem extends StudioLandingPage {
@@ -630,6 +678,19 @@ export interface PublicLandingPage {
     studioName: string | null;
     branding: Branding | null;
     faviconUrl: string | null;
+    /** null: gesperrte Page, die ihren Header erst nach dem Entsperren zeigt. */
+    header: PublicGalleryMeta["header"] | null;
+    /** Button im Header, nur auf entsperrten Pages. */
+    cta: { label: string; url: string } | null;
+    colors: { background: string | null; accent: string | null };
+    fonts: { heading: string | null; body: string | null };
+    footerMarkdown: string | null;
+    display: {
+      layout: PageGalleryLayout;
+      titleOnImage: boolean;
+      showDate: boolean;
+      showCount: boolean;
+    };
   };
   galleries: PublicPageCard[];
 }
@@ -1017,7 +1078,8 @@ export const api = {
       password: string | null;
       brandingId: string | null;
       isStudioDefault: boolean;
-    }>
+    }> &
+      Partial<LandingPageDesign>
   ) =>
     request<{ page: StudioLandingPage; startPageRemoved: boolean }>(
       `/pages/${id}`,
@@ -1025,6 +1087,41 @@ export const api = {
     ),
   deletePage: (id: string) =>
     request<void>(`/pages/${id}`, { method: "DELETE" }),
+  getPageHeroCandidates: (id: string) =>
+    request<PageHeroCandidates>(`/pages/${id}/hero-candidates`),
+  /** Headerbild oder Logo einer Page hochladen; liefert den Storage-Key
+   *  fuer heroUrl / eventLogoUrl. Wie uploadGalleryAsset (Resize vorab). */
+  uploadPageAsset: async (
+    pageId: string,
+    kind: "logo" | "hero",
+    file: File
+  ): Promise<{ storageKey: string }> => {
+    let optimized: File = file;
+    try {
+      const { resizeImage } = await import("./imageResize");
+      optimized = await resizeImage(file, kind);
+    } catch {
+      optimized = file;
+    }
+    const presign = await request<{ uploadUrl: string; storageKey: string }>(
+      `/pages/${pageId}/assets/presign`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          kind,
+          contentType: optimized.type,
+          contentLength: optimized.size,
+        }),
+      }
+    );
+    const putRes = await fetch(presign.uploadUrl, {
+      method: "PUT",
+      body: optimized,
+      headers: { "Content-Type": optimized.type },
+    });
+    if (!putRes.ok) throw new Error(`Upload failed (${putRes.status})`);
+    return { storageKey: presign.storageKey };
+  },
   addPageGallery: (pageId: string, galleryId: string) =>
     request<{ gallery: StudioPageGallery }>(`/pages/${pageId}/galleries`, {
       method: "POST",

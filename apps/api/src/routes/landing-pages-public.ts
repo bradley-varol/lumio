@@ -8,6 +8,7 @@
  *   GET  /p/:slug                    — a page and the galleries visible on it
  *   POST /p/:slug/unlock             — password for a password page
  *   GET  /p/:slug/covers/:gallerySlug — redirect to a short-lived cover image
+ *   GET  /p/:slug/assets/:kind       — header image / logo of the page (redirect)
  *
  * What a visitor may see is decided in services/landing-pages.ts. In short: a
  * page lists, it never grants access. A gallery card links to /g/<slug> and
@@ -38,6 +39,10 @@ import {
   resolvePageBySlug,
 } from "../services/landing-page-lookup.js";
 import {
+  PAGE_DESIGN_SELECT,
+  resolvePageHeroFile,
+} from "../services/landing-page-design.js";
+import {
   PAGE_GALLERY_LIMIT,
   galleryIneligibleReason,
   isGalleryProtected,
@@ -62,6 +67,7 @@ const PUBLIC_PAGE_SELECT = {
   passwordHash: true,
   isStudioDefault: true,
   brandingId: true,
+  ...PAGE_DESIGN_SELECT,
   tenant: { select: { status: true, displayName: true, name: true } },
 } satisfies Prisma.LandingPageSelect;
 
@@ -207,6 +213,57 @@ async function visibleGalleries(page: PublicPage) {
   });
 }
 
+/** Storage key of the page's header image, or null. A photo from a gallery
+ *  is re-checked here (still on the page, visible, no password). */
+async function heroStorageKey(page: PublicPage): Promise<string | null> {
+  if (page.heroUrl) return page.heroUrl;
+  if (!page.heroFileId) return null;
+  const hero = await resolvePageHeroFile(page);
+  return hero.ok ? hero.storageKey : null;
+}
+
+/** Whether a visitor may see the header (image, logo, title) right now. */
+function headerVisible(page: PublicPage, unlocked: boolean): boolean {
+  return unlocked || page.showHeaderWhenLocked;
+}
+
+/** Header, look and gallery display of a page. The header is null on a
+ *  locked page unless the studio chose to show it before unlocking; the
+ *  welcome text and the button only ever appear once unlocked. */
+async function pageDesign(page: PublicPage, unlocked: boolean) {
+  const showHeader = headerVisible(page, unlocked);
+  const heroKey = showHeader ? await heroStorageKey(page) : null;
+  const asset = (kind: "hero" | "logo", key: string) =>
+    `/api/v1/p/${page.slug}/assets/${kind}${cacheBust(key)}`;
+  return {
+    header: showHeader
+      ? {
+          layout: page.heroLayout as "minimal" | "splash" | "side_by_side" | "centered",
+          heroImageUrl: heroKey ? asset("hero", heroKey) : null,
+          overlayColor: page.heroOverlayColor,
+          overlayBlur: page.heroOverlayBlur,
+          backgroundColor: page.heroBackgroundColor,
+          eventLogoUrl: page.eventLogoUrl ? asset("logo", page.eventLogoUrl) : null,
+          eventLogoSize: page.eventLogoSize as "small" | "medium" | "large",
+          welcomeMarkdown: unlocked ? page.introMarkdown : null,
+        }
+      : null,
+    cta:
+      unlocked && page.ctaLabel && page.ctaUrl
+        ? { label: page.ctaLabel, url: page.ctaUrl }
+        : null,
+    colors: { background: page.colorBackground, accent: page.colorAccent },
+    fonts: { heading: page.fontHeading, body: page.fontBody },
+    footerMarkdown: page.footerMarkdown,
+    display: {
+      layout: page.galleryLayout as "grid" | "editorial" | "bands",
+      titleOnImage: page.cardTitleOnImage,
+      showDate: page.cardShowDate,
+      showCount: page.cardShowCount,
+    },
+  };
+}
+
 /** The response for a page, locked or not. */
 async function pageResponse(page: PublicPage, unlocked: boolean) {
   const branding = await resolveGalleryBranding({
@@ -231,6 +288,7 @@ async function pageResponse(page: PublicPage, unlocked: boolean) {
       studioName: page.tenant.displayName ?? page.tenant.name,
       branding,
       faviconUrl,
+      ...(await pageDesign(page, unlocked)),
     },
     galleries: unlocked ? await visibleGalleries(page) : [],
   };
@@ -394,6 +452,37 @@ export async function registerLandingPagePublicRoutes(app: FastifyInstance) {
       });
       // Private: on a password page the response depends on the cookie. Short,
       // so that turning a preview off takes effect within minutes.
+      reply.header("Cache-Control", "private, max-age=120");
+      return reply.redirect(url);
+    }
+  );
+  // -------------------------------------------------------------------------
+  // GET /p/:slug/assets/:kind — header image or logo
+  // -------------------------------------------------------------------------
+  // Same pattern as the covers: a stable same-origin URL that re-checks the
+  // rules and redirects to a link that lives for minutes. On a locked page
+  // only if the studio chose to show the header before unlocking.
+  app.get<{ Params: { slug: string; kind: string } }>(
+    "/p/:slug/assets/:kind",
+    async (req, reply) => {
+      const kind = req.params.kind;
+      if (kind !== "hero" && kind !== "logo") {
+        return reply.status(404).send({ error: "not_found" });
+      }
+      const page = await resolvePageBySlug(req, req.params.slug, {
+        select: PUBLIC_PAGE_SELECT,
+      });
+      if (!page) return reply.status(404).send({ error: "not_found" });
+      const offline = await offlineReason(page);
+      if (offline) return reply.status(offline.status).send({ error: offline.error });
+      if (!headerVisible(page, isUnlocked(req, page))) {
+        return reply.status(401).send({ error: "unlock_required" });
+      }
+
+      const key = kind === "logo" ? page.eventLogoUrl : await heroStorageKey(page);
+      if (!key) return reply.status(404).send({ error: "not_set" });
+
+      const url = await presignGet({ key, ttlSeconds: COVER_URL_TTL_SECONDS });
       reply.header("Cache-Control", "private, max-age=120");
       return reply.redirect(url);
     }

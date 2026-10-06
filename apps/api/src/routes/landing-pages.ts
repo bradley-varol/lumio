@@ -9,8 +9,10 @@
  *   GET    /pages                              — list
  *   POST   /pages                              — create (link_only), optionally with a first gallery
  *   GET    /pages/:id                          — page + its galleries
- *   PATCH  /pages/:id                          — title, intro, slug, access, password, branding, start page
+ *   PATCH  /pages/:id                          — title, intro, slug, access, password, branding, start page, design
  *   DELETE /pages/:id
+ *   POST   /pages/:id/assets/presign           — upload URL for header image / logo
+ *   GET    /pages/:id/hero-candidates          — photos allowed as header image
  *
  *   POST   /pages/:id/galleries                — put a gallery on the page
  *   PATCH  /pages/:id/galleries/:galleryId     — per-page title, preview opt-in
@@ -30,6 +32,7 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Prisma } from "@prisma/client";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 
 import { prisma } from "../db.js";
@@ -41,10 +44,18 @@ import {
 import { hashPassword, type SessionContext } from "../services/auth.js";
 import { isFeatureEnabled } from "../services/feature-flags.js";
 import { logEvent } from "../services/audit.js";
-import { presignGet } from "../services/storage.js";
+import { deleteObject, presignGet, presignPut } from "../services/storage.js";
 import { resolveCoverThumbs } from "../services/gallery-covers.js";
 import { galleryAccessWhere } from "../lib/gallery-access.js";
 import { isPageSlugTaken } from "../services/landing-page-lookup.js";
+import {
+  PAGE_DESIGN_SELECT,
+  isPageAssetKey,
+  pageAssetPrefix,
+  pageDesignData,
+  pageDesignSchema,
+  resolvePageHeroFile,
+} from "../services/landing-page-design.js";
 import {
   PAGE_ACCESS,
   PAGE_GALLERY_LIMIT,
@@ -74,7 +85,7 @@ const createSchema = z.object({
   galleryId: z.string().uuid().optional(),
 });
 
-const updateSchema = z.object({
+const updateSchema = pageDesignSchema.extend({
   title: z.string().trim().min(1).max(PAGE_TITLE_MAX_LENGTH).optional(),
   introMarkdown: z.string().max(PAGE_INTRO_MAX_LENGTH).nullable().optional(),
   slug: z.string().max(GALLERY_SLUG_MAX_LENGTH).optional(),
@@ -85,6 +96,15 @@ const updateSchema = z.object({
 });
 
 const addGallerySchema = z.object({ galleryId: z.string().uuid() });
+
+const presignSchema = z.object({
+  kind: z.enum(["hero", "logo"]),
+  contentType: z.string().min(1).max(100),
+  contentLength: z.number().int().positive().optional(),
+});
+
+/** Photos per gallery offered as header image. Enough to pick from, bounded. */
+const HERO_CANDIDATES_PER_GALLERY = 60;
 
 const updateItemSchema = z.object({
   titleOverride: z
@@ -105,6 +125,7 @@ const reorderSchema = z.object({
 
 const PAGE_SELECT = {
   id: true,
+  tenantId: true,
   slug: true,
   title: true,
   introMarkdown: true,
@@ -112,6 +133,7 @@ const PAGE_SELECT = {
   passwordHash: true,
   isStudioDefault: true,
   brandingId: true,
+  ...PAGE_DESIGN_SELECT,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.LandingPageSelect;
@@ -159,9 +181,51 @@ function pageDto(p: PageRow) {
     hasPassword: p.passwordHash !== null,
     isStudioDefault: p.isStudioDefault,
     brandingId: p.brandingId,
+    design: {
+      heroLayout: p.heroLayout,
+      heroFileId: p.heroFileId,
+      heroUrl: p.heroUrl,
+      heroOverlayColor: p.heroOverlayColor,
+      heroOverlayBlur: p.heroOverlayBlur,
+      heroBackgroundColor: p.heroBackgroundColor,
+      eventLogoUrl: p.eventLogoUrl,
+      eventLogoSize: p.eventLogoSize,
+      fontHeading: p.fontHeading,
+      fontBody: p.fontBody,
+      colorBackground: p.colorBackground,
+      colorAccent: p.colorAccent,
+      footerMarkdown: p.footerMarkdown,
+      galleryLayout: p.galleryLayout,
+      cardTitleOnImage: p.cardTitleOnImage,
+      cardShowDate: p.cardShowDate,
+      cardShowCount: p.cardShowCount,
+      ctaLabel: p.ctaLabel,
+      ctaUrl: p.ctaUrl,
+      showHeaderWhenLocked: p.showHeaderWhenLocked,
+    },
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };
+}
+
+/**
+ * Preview links for the studio editor: header image and logo as they are
+ * stored, signed directly (the public asset route would refuse a studio user
+ * on a locked page). heroFileProblem says why a chosen gallery photo is not
+ * shown to visitors right now (gallery got a password, left the page, ...).
+ */
+async function designPreview(p: PageRow) {
+  let heroPreviewUrl: string | null = null;
+  let heroFileProblem: string | null = null;
+  if (p.heroUrl) {
+    heroPreviewUrl = await presignGet({ key: p.heroUrl });
+  } else if (p.heroFileId) {
+    const hero = await resolvePageHeroFile(p);
+    if (hero.ok) heroPreviewUrl = await presignGet({ key: hero.storageKey });
+    else heroFileProblem = hero.problem;
+  }
+  const logoPreviewUrl = p.eventLogoUrl ? await presignGet({ key: p.eventLogoUrl }) : null;
+  return { heroPreviewUrl, heroFileProblem, logoPreviewUrl };
 }
 
 /**
@@ -350,7 +414,10 @@ export async function registerLandingPageRoutes(app: FastifyInstance) {
       select: ITEM_SELECT,
     });
 
-    return { page: pageDto(page), galleries: await itemDtos(rows) };
+    return {
+      page: { ...pageDto(page), designPreview: await designPreview(page) },
+      galleries: await itemDtos(rows),
+    };
   });
 
   // -------------------------------------------------------------------------
@@ -399,6 +466,32 @@ export async function registerLandingPageRoutes(app: FastifyInstance) {
       if (!branding) return reply.status(400).send({ error: "invalid_branding" });
     }
 
+    // --- design -------------------------------------------------------------
+    // Uploaded assets only from this page's own storage prefix (the presign
+    // route below hands those out). A header photo only from a gallery that
+    // is on this page, visible there and without a password.
+    for (const key of [body.heroUrl, body.eventLogoUrl]) {
+      if (key && !isPageAssetKey(tenantId, id, key)) {
+        return reply.status(400).send({ error: "invalid_asset_key" });
+      }
+    }
+    if (body.heroFileId) {
+      const hero = await resolvePageHeroFile({
+        id,
+        tenantId,
+        heroFileId: body.heroFileId,
+      });
+      if (!hero.ok) {
+        return reply.status(400).send({
+          error:
+            hero.problem === "gallery_protected"
+              ? "hero_gallery_protected"
+              : "hero_file_invalid",
+        });
+      }
+    }
+    const design = pageDesignData(body);
+
     // --- access, password and start page ------------------------------------
     const change = resolvePageAccessChange(
       {
@@ -434,6 +527,7 @@ export async function registerLandingPageRoutes(app: FastifyInstance) {
     if (body.brandingId !== undefined && body.brandingId !== existing.brandingId) {
       changed.push("brandingId");
     }
+    if (Object.keys(design).length > 0) changed.push("design");
 
     let page: PageRow;
     let displacedStartPage: { id: string; slug: string } | null = null;
@@ -464,6 +558,7 @@ export async function registerLandingPageRoutes(app: FastifyInstance) {
             access,
             ...(passwordHash !== undefined ? { passwordHash } : {}),
             ...(body.brandingId !== undefined ? { brandingId: body.brandingId } : {}),
+            ...design,
             isStudioDefault,
           },
           select: PAGE_SELECT,
@@ -530,6 +625,115 @@ export async function registerLandingPageRoutes(app: FastifyInstance) {
   });
 
   // -------------------------------------------------------------------------
+  // POST /pages/:id/assets/presign — header image or logo upload
+  // -------------------------------------------------------------------------
+  // Same flow as a gallery's header assets: the browser uploads straight to
+  // S3 with a short-lived PUT URL, then PATCHes the returned key as heroUrl /
+  // eventLogoUrl. The key lives under the page's own prefix, which the PATCH
+  // checks.
+  app.post<{ Params: { id: string } }>("/pages/:id/assets/presign", async (req, reply) => {
+    const s = await guard(req, reply);
+    if (!s) return;
+    const tenantId = s.user.tenantId;
+    const { id } = idParams.parse(req.params);
+    const body = presignSchema.parse(req.body);
+    if (!/^image\/(jpeg|png|webp|gif|avif|svg\+xml)$/.test(body.contentType)) {
+      return reply.status(400).send({ error: "must be an image" });
+    }
+    if (body.contentLength && body.contentLength > 10 * 1024 * 1024) {
+      return reply.status(400).send({ error: "image too large (max 10 MB)" });
+    }
+    const page = await loadPage(tenantId, id);
+    if (!page) return reply.status(404).send({ error: "not_found" });
+
+    const ext = body.contentType.split("/")[1]?.split("+")[0] ?? "bin";
+    const storageKey = `${pageAssetPrefix(tenantId, id)}${body.kind}-${randomBytes(8).toString("hex")}.${ext}`;
+    const uploadUrl = await presignPut({
+      key: storageKey,
+      contentType: body.contentType,
+      contentLength: body.contentLength,
+      ttlSeconds: 900,
+    });
+    return { uploadUrl, storageKey };
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /pages/:id/hero-candidates — photos that may become the header image
+  // -------------------------------------------------------------------------
+  // Only from galleries on this page that a visitor sees there and that have
+  // no password (issue #65). Protected galleries are listed with a flag so
+  // the editor can say why they are missing, but without photos.
+  app.get<{ Params: { id: string } }>("/pages/:id/hero-candidates", async (req, reply) => {
+    const s = await guard(req, reply);
+    if (!s) return;
+    const { id } = idParams.parse(req.params);
+    const page = await loadPage(s.user.tenantId, id);
+    if (!page) return reply.status(404).send({ error: "not_found" });
+
+    const rows = await prisma.landingPageGallery.findMany({
+      where: { landingPageId: id, gallery: { tenantId: s.user.tenantId } },
+      orderBy: ITEM_ORDER,
+      select: {
+        titleOverride: true,
+        gallery: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            expiresAt: true,
+            publicAccess: true,
+            passwordHash: true,
+          },
+        },
+      },
+    });
+    const now = new Date();
+    const galleries = await Promise.all(
+      rows.map(async (r) => {
+        const g = r.gallery;
+        const usable = galleryIneligibleReason(g, now) === null && !isGalleryProtected(g);
+        const files = usable
+          ? await prisma.file.findMany({
+              where: {
+                galleryId: g.id,
+                kind: "image",
+                status: "ready",
+                publicVisibility: "visible",
+              },
+              orderBy: [{ sortIndex: "asc" }, { createdAt: "asc" }],
+              take: HERO_CANDIDATES_PER_GALLERY,
+              select: {
+                id: true,
+                originalFilename: true,
+                renditions: {
+                  where: { kind: "thumb" },
+                  select: { storageKey: true },
+                  take: 1,
+                },
+              },
+            })
+          : [];
+        return {
+          galleryId: g.id,
+          title: r.titleOverride ?? g.title,
+          usable,
+          protected: isGalleryProtected(g),
+          files: await Promise.all(
+            files
+              .filter((f) => f.renditions.length > 0)
+              .map(async (f) => ({
+                id: f.id,
+                filename: f.originalFilename,
+                thumbUrl: await presignGet({ key: f.renditions[0].storageKey }),
+              }))
+          ),
+        };
+      })
+    );
+    return { galleries };
+  });
+
+  // -------------------------------------------------------------------------
   // DELETE /pages/:id
   // -------------------------------------------------------------------------
   app.delete<{ Params: { id: string } }>("/pages/:id", async (req, reply) => {
@@ -542,6 +746,15 @@ export async function registerLandingPageRoutes(app: FastifyInstance) {
 
     // The links to its galleries cascade, the galleries themselves stay.
     await prisma.landingPage.delete({ where: { id } });
+    // Its own uploads (header image, logo) go with it. Best effort: a leftover
+    // object is unreachable anyway, nothing points to it any more.
+    for (const key of [existing.heroUrl, existing.eventLogoUrl]) {
+      if (key && isPageAssetKey(s.user.tenantId, id, key)) {
+        await deleteObject(key).catch((err) =>
+          req.log.warn({ err, key }, "page asset delete failed")
+        );
+      }
+    }
 
     await logEvent({
       tenantId: s.user.tenantId,

@@ -2,7 +2,8 @@
 
 /**
  * The settings of a landing page ("Page") in the studio editor: details
- * (title, intro, design), the page URL, and who can open it.
+ * (title, intro, branding profile), the page URL, and who can open it. The
+ * header and look are in LandingPageDesign.tsx.
  *
  * Three independent sections, each with its own Save, like the gallery's
  * slug editor. A section only resets its own fields when the server value it
@@ -257,11 +258,16 @@ export function LandingPageAccess({ page, onSaved }: SectionProps) {
   const [access, setAccess] = useState<Access>(page.access);
   const [password, setPassword] = useState("");
   const [startPage, setStartPage] = useState(page.isStudioDefault);
+  const [showHeader, setShowHeader] = useState(page.design.showHeaderWhenLocked);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => setAccess(page.access), [page.access]);
   useEffect(() => setStartPage(page.isStudioDefault), [page.isStudioDefault]);
+  useEffect(
+    () => setShowHeader(page.design.showHeaderWhenLocked),
+    [page.design.showHeaderWhenLocked]
+  );
 
   // Only a public page can be the start page: leaving public gives it up.
   const effectiveStartPage = access === "public" && startPage;
@@ -269,6 +275,7 @@ export function LandingPageAccess({ page, onSaved }: SectionProps) {
   const dirty =
     access !== page.access ||
     effectiveStartPage !== page.isStudioDefault ||
+    showHeader !== page.design.showHeaderWhenLocked ||
     (access === "password" && password.length > 0);
 
   async function save() {
@@ -299,6 +306,7 @@ export function LandingPageAccess({ page, onSaved }: SectionProps) {
         access,
         ...(access === "password" && password ? { password } : {}),
         isStudioDefault: effectiveStartPage,
+        showHeaderWhenLocked: showHeader,
       });
       setPassword("");
       await onSaved();
@@ -362,6 +370,23 @@ export function LandingPageAccess({ page, onSaved }: SectionProps) {
             <p className="text-xs text-semantic-warning">{t("pages.passwordNeeded")}</p>
           )}
         </div>
+      )}
+
+      {access === "password" && (
+        <label className="flex items-start gap-3 rounded-md border border-line-subtle px-3 py-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showHeader}
+            onChange={(e) => setShowHeader(e.target.checked)}
+            className="mt-1"
+          />
+          <span>
+            <span className="block text-sm font-medium">{t("pages.showHeaderLocked")}</span>
+            <span className="block text-xs text-ink-tertiary leading-relaxed">
+              {t(showHeader ? "pages.showHeaderLockedOn" : "pages.showHeaderLockedOff")}
+            </span>
+          </span>
+        </label>
       )}
 
       <label

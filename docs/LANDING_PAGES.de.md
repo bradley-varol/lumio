@@ -30,11 +30,11 @@ Aus einer Galerie heraus geht dasselbe in einem Schritt: **Teilen → Seiten →
 | **Nur mit Link** (Standard) | Wer den Link hat | Sollen nicht (`noindex`) | Nein |
 | **Passwort** | Wer den Link und das Passwort hat | Sollen nicht (`noindex`) | Nein |
 
-Eine Passwort-Seite zeigt bis zum Entsperren nur ihren Titel; Einleitung und Galerien werden nicht an den Browser geschickt. Das Passwort ist unabhängig von den Passwörtern der Galerien darauf.
+Bis eine Passwort-Seite entsperrt ist, werden Einleitung, Header-Button und Galerien nicht an den Browser geschickt. Standardmäßig sehen Besucher nur das Passwortfeld. Mit **Header vor dem Entsperren zeigen** (unter *Wer diese Seite öffnen darf*) stehen Headerbild, Logo und Titel darüber. Das Passwort ist unabhängig von den Passwörtern der Galerien darauf.
 
 ## Was Besucher sehen
 
-Eine Karte zeigt das Cover (in Originalproportionen, in einem Justified-Raster), den Titel, das Erstellungsdatum, die Anzahl der Dateien, die Beschreibung und bei einer Galerie mit Passwort ein Schloss.
+Eine Karte zeigt das Cover, den Titel, das Erstellungsdatum, die Anzahl der Dateien, die Beschreibung und bei einer Galerie mit Passwort ein Schloss. Wie die Karten angeordnet sind und was davon sie zeigen, stellst du unter **Gestaltung** ein (siehe unten).
 
 **Welche Galerien gelistet werden.** Eine Galerie erscheint auf einer Seite nur, solange sie **aktiv** und **nicht abgelaufen** ist und **ohne Freigabe-Link geöffnet** werden kann (öffentlicher Zugang an). Sonst wird sie übersprungen, und im Editor steht der Grund dabei („Nicht sichtbar: Entwurf / archiviert / abgelaufen / braucht Freigabe-Link“). Ihr Platz auf der Seite bleibt erhalten, sie kommt also an dieselbe Stelle zurück.
 
@@ -46,7 +46,7 @@ Das wird beim Laden der Seite entschieden, nicht beim Hinzufügen: Bekommt eine 
 
 ### Covers bleiben im Speicher privat
 
-Cover-Bilder sind nicht direkt auf den Speicher verlinkt. Sie laden über `/api/v1/p/<Seite>/covers/<Galerie>`, das die obigen Regeln bei jeder Anfrage prüft und dann auf einen Link weiterleitet, der fünf Minuten gilt. Schaltest du eine Vorschau ab, wirkt das deshalb binnen Minuten, und der Speicher-Bucket bleibt privat, wie in [STORAGE.de.md](STORAGE.de.md) beschrieben. Das erste Cover dient auch als Vorschaubild, wenn der Seiten-Link geteilt wird.
+Cover-Bilder sind nicht direkt auf den Speicher verlinkt. Sie laden über `/api/v1/p/<Seite>/covers/<Galerie>`, das die obigen Regeln bei jeder Anfrage prüft und dann auf einen Link weiterleitet, der fünf Minuten gilt. Schaltest du eine Vorschau ab, wirkt das deshalb binnen Minuten, und der Speicher-Bucket bleibt privat, wie in [STORAGE.de.md](STORAGE.de.md) beschrieben. Headerbild, Logo und ein Header-Foto aus einer Galerie laden genauso, über `/api/v1/p/<Seite>/assets/hero|logo`. Wird der Seiten-Link geteilt, ist das Headerbild das Vorschaubild; ohne Headerbild das erste Cover.
 
 ## Die Startseite (`/`)
 
@@ -64,7 +64,17 @@ Der Slug einer Seite ist standardmäßig zufällig (`/p/k3m9x4tqzr7a`) und unter
 
 ## Gestaltung
 
-Standardmäßig nutzt eine Seite die Standard-Gestaltung deines Studios (Logo, Farben, Schrift). Wähle unter **Details → Gestaltung** ein anderes Profil, wenn eine Seite anders aussehen soll. Die Einleitung unterstützt Markdown.
+Eine Seite kann wie eine Landingpage aussehen, nicht nur wie eine Liste. Der Abschnitt **Gestaltung** im Seiten-Editor hat dieselben Header-Optionen wie eine Galerie, jede Änderung wird sofort gespeichert:
+
+- **Header-Layout:** Minimal, Splash (Vollbild), Nebeneinander oder Zentriert. Titel und Einleitung (Markdown) kommen aus *Details*.
+- **Headerbild:** eigenes hochladen oder ein Foto aus einer Galerie dieser Seite nehmen. Nur Galerien, die auf der Seite angezeigt werden und **kein Passwort** haben, können ein Foto liefern. Das wird bei jedem Aufruf neu geprüft: Bekommt die Galerie später ein Passwort oder verlässt sie die Seite, verschwindet das Foto aus dem Header, und der Editor sagt es.
+- **Overlay-Farbe und Weichzeichner** über dem Headerbild, ohne Bild eine **Hintergrundfarbe**.
+- **Logo** im Header, in drei Größen. Es ersetzt die Logo-Leiste des Brandings oben.
+- **Header-Button**, z. B. *Termin anfragen*, mit Link auf eine Website, eine E-Mail (`mailto:`) oder eine Telefonnummer (`tel:`). Erscheint erst, wenn die Seite offen ist.
+- **Galerien:** *Raster* (Justified-Reihen wie bisher), *Editorial* (die erste Galerie groß, die anderen in Spalten) oder *Bänder* (pro Galerie ein Band in voller Breite); Titel auf dem Bild oder darunter; Datum und Anzahl der Fotos ein- oder ausblenden.
+- **Footer** (Markdown), **Schriften** und **Farben** nur für diese Seite.
+
+Ohne diese Einstellungen sieht eine Seite aus wie bisher. Das Branding-Profil (Logo, Farben, Schrift) wählst du weiter unter **Details → Branding-Profil**; die Gestaltung überschreibt es für diese Seite.
 
 ## Galerien archivieren und löschen
 
@@ -91,10 +101,12 @@ Studio (angemeldet als Owner oder Admin):
 | | |
 |---|---|
 | `GET/POST /pages` | auflisten, anlegen (`{title, galleryId?}`) |
-| `GET/PATCH/DELETE /pages/:id` | Seite und ihre Galerien; Titel, Einleitung, Slug, Zugang, Passwort, Branding, Startseite |
+| `GET/PATCH/DELETE /pages/:id` | Seite und ihre Galerien; Titel, Einleitung, Slug, Zugang, Passwort, Branding, Startseite, Gestaltung |
+| `POST /pages/:id/assets/presign` | Upload-URL für Headerbild oder Logo (`{kind, contentType, contentLength}`) |
+| `GET /pages/:id/hero-candidates` | Fotos, die Headerbild werden dürfen |
 | `POST /pages/:id/galleries` | Galerie auf eine Seite legen (`{galleryId}`) |
 | `PATCH/DELETE /pages/:id/galleries/:galleryId` | Titel auf dieser Seite, Vorschau-Freigabe; entfernen |
 | `POST /pages/:id/galleries/reorder` | `{order: [galleryId, …]}` |
 | `GET /galleries/:id/pages` | alle Seiten und ob sie diese Galerie enthalten |
 
-Öffentlich (ohne Anmeldung; das Studio kommt aus dem Host der Anfrage, wie bei `/g/:slug`): `GET /p` (Startseite), `GET /p/:slug`, `POST /p/:slug/unlock`, `GET /p/:slug/covers/:gallerySlug`.
+Öffentlich (ohne Anmeldung; das Studio kommt aus dem Host der Anfrage, wie bei `/g/:slug`): `GET /p` (Startseite), `GET /p/:slug`, `POST /p/:slug/unlock`, `GET /p/:slug/covers/:gallerySlug`, `GET /p/:slug/assets/hero|logo`.

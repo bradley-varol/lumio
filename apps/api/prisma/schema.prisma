@@ -1651,6 +1651,37 @@ model LandingPage {
   // page may be the default.
   isStudioDefault Boolean  @default(false)
 
+  // --- Design (issue #65). Same header options as a gallery; introMarkdown is
+  // the welcome text. All optional: a page without them looks as before.
+  heroLayout          String   @default("minimal") // minimal | splash | side_by_side | centered
+  // Header image: either an upload (heroUrl, storage key under
+  // t/<tenant>/pages/<page>/assets/) or a photo from a gallery on this page
+  // (heroFileId). The photo is only shown while its gallery is on the page,
+  // visible there and has no password; checked on every request.
+  heroFileId          String?  @db.Uuid
+  heroUrl             String?
+  heroOverlayColor    String?  @db.VarChar(9)
+  heroOverlayBlur     Int?
+  heroBackgroundColor String?  @db.VarChar(7)
+  eventLogoUrl        String?
+  eventLogoSize       String   @default("medium")
+  fontHeading         String?  @db.VarChar(40)
+  fontBody            String?  @db.VarChar(40)
+  colorBackground     String?  @db.VarChar(7)
+  colorAccent         String?  @db.VarChar(7)
+  footerMarkdown      String?
+  // How the galleries are shown: grid | editorial | bands
+  galleryLayout       String   @default("grid")
+  cardTitleOnImage    Boolean  @default(false)
+  cardShowDate        Boolean  @default(true)
+  cardShowCount       Boolean  @default(true)
+  // Optional button in the header (e.g. "Book a session").
+  ctaLabel            String?
+  ctaUrl              String?
+  // Password page: show header image, logo and title above the password
+  // field. Off: only the password field.
+  showHeaderWhenLocked Boolean @default(false)
+
   galleries       LandingPageGallery[]
 
   createdAt       DateTime @default(now())

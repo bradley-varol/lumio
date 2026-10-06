@@ -10,6 +10,7 @@ import {
   LandingPageDetails,
 } from "@/components/studio/LandingPageSettings";
 import { LandingPageGalleries } from "@/components/studio/LandingPageGalleries";
+import { LandingPageDesign } from "@/components/studio/LandingPageDesign";
 import { Button } from "@/components/ui";
 import { useConfirm } from "@/components/ui/dialogs";
 import { useErrorText } from "@/lib/error-i18n";
@@ -123,6 +124,7 @@ export default function PageEditorPage() {
         )}
         <LandingPageGalleries pageId={page.id} items={items} onChanged={load} />
         <LandingPageDetails page={page} onSaved={load} />
+        <LandingPageDesign page={page} onSaved={load} />
         <LandingPageAccess page={page} onSaved={load} />
         <LandingPageAddress page={page} onSaved={load} />
       </div>

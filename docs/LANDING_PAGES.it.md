@@ -30,11 +30,11 @@ Da una galleria, **Condividi → Pagine → Aggiungi a una pagina** fa lo stesso
 | **Solo con link** (predefinito) | Chi ha il link | Viene detto di non farlo (`noindex`) | No |
 | **Password** | Chi ha il link e la password | Viene detto di non farlo (`noindex`) | No |
 
-Una pagina con password mostra solo il suo titolo finché non è sbloccata; introduzione e gallerie non vengono inviate al browser. La password è indipendente da quelle delle gallerie al suo interno.
+Finché una pagina con password non è sbloccata, introduzione, pulsante dell'intestazione e gallerie non vengono inviati al browser. Per impostazione predefinita i visitatori vedono solo il campo password. Con **Mostra l'intestazione prima dello sblocco** (in *Chi può aprire questa pagina*) immagine di intestazione, logo e titolo compaiono sopra di esso. La password è indipendente da quelle delle gallerie al suo interno.
 
 ## Cosa vedono i visitatori
 
-Una scheda mostra la copertina (nelle proporzioni originali, in una griglia justified), il titolo, la data di creazione, il numero di file, la descrizione e, per una galleria con password, un lucchetto.
+Una scheda mostra la copertina, il titolo, la data di creazione, il numero di file, la descrizione e, per una galleria con password, un lucchetto. Come sono disposte le schede e cosa mostrano si imposta in **Aspetto** (vedi sotto).
 
 **Quali gallerie vengono elencate.** Una galleria compare in una pagina solo finché è **attiva**, **non scaduta** e può essere **aperta senza link di condivisione** (accesso pubblico attivo). Altrimenti viene saltata, e nell'editor è indicato il motivo («Non visibile: bozza / archiviata / scaduta / richiede link di condivisione»). Il suo posto nella pagina viene conservato, quindi torna dov'era.
 
@@ -46,7 +46,7 @@ Questo si decide quando la pagina viene caricata, non quando aggiungi la galleri
 
 ### Le copertine restano private nello storage
 
-Le copertine non sono collegate direttamente allo storage. Si caricano tramite `/api/v1/p/<pagina>/covers/<galleria>`, che verifica le regole di cui sopra a ogni richiesta e poi reindirizza a un link valido per cinque minuti. Disattivare un'anteprima ha quindi effetto entro pochi minuti, e il bucket resta privato come descritto in [STORAGE.it.md](STORAGE.it.md). La prima copertina serve anche da immagine di anteprima quando il link della pagina viene condiviso.
+Le copertine non sono collegate direttamente allo storage. Si caricano tramite `/api/v1/p/<pagina>/covers/<galleria>`, che verifica le regole di cui sopra a ogni richiesta e poi reindirizza a un link valido per cinque minuti. Disattivare un'anteprima ha quindi effetto entro pochi minuti, e il bucket resta privato come descritto in [STORAGE.it.md](STORAGE.it.md). Immagine di intestazione, logo e una foto di intestazione presa da una galleria si caricano allo stesso modo, tramite `/api/v1/p/<pagina>/assets/hero|logo`. Quando il link della pagina viene condiviso, l'immagine di anteprima è quella di intestazione; senza, la prima copertina.
 
 ## La pagina iniziale (`/`)
 
@@ -62,9 +62,19 @@ Rendi una pagina **pubblica** la tua pagina iniziale (*Chi può aprire questa pa
 
 Lo slug di una pagina è casuale per impostazione predefinita (`/p/k3m9x4tqzr7a`) e si può cambiare sotto **URL della pagina**. Valgono le regole degli slug delle gallerie: da 3 a 60 caratteri, lettere minuscole, cifre e trattini, nessuna parola riservata. È univoco per studio (su tutta l'installazione in una a studio singolo). Dopo una modifica il link precedente smette di funzionare, anche nei link già inviati.
 
-## Design
+## Aspetto
 
-Per impostazione predefinita una pagina usa il design predefinito del tuo studio (logo, colori, font). Scegli un altro profilo in **Dettagli → Design** se una pagina deve avere un aspetto diverso. L'introduzione supporta Markdown.
+Una pagina può sembrare una landing page, non solo un elenco. La sezione **Aspetto** dell'editor ha le stesse opzioni di intestazione di una galleria, e ogni modifica viene salvata subito:
+
+- **Layout dell'intestazione:** Minimal, Splash (schermo intero), Affiancato o Centrato. Titolo e introduzione (Markdown) vengono da *Dettagli*.
+- **Immagine di intestazione:** caricane una tua o prendi una foto da una galleria di questa pagina. Solo le gallerie mostrate nella pagina e **senza password** possono fornire una foto. Viene verificato a ogni visita: se quella galleria in seguito riceve una password o lascia la pagina, la foto sparisce dall'intestazione e l'editor lo segnala.
+- **Colore di sovrapposizione e sfocatura** sopra l'immagine, oppure un **colore di sfondo** senza immagine.
+- **Logo** nell'intestazione, in tre dimensioni. Sostituisce la fascia del logo del branding in alto.
+- **Pulsante nell'intestazione**, ad es. *Prenota un servizio*, con link a un sito, un'email (`mailto:`) o un numero di telefono (`tel:`). Appare solo quando la pagina è aperta.
+- **Gallerie:** *Griglia* (righe justified, come prima), *Editoriale* (la prima galleria grande, le altre in colonne) o *Fasce* (una fascia a tutta larghezza per galleria); titolo sull'immagine o sotto; data e numero di foto attivabili.
+- **Footer** (Markdown), **caratteri** e **colori** solo per questa pagina.
+
+Senza queste impostazioni una pagina appare come prima. Il profilo di branding (logo, colori, carattere) si sceglie sempre in **Dettagli → Profilo di branding**; l'aspetto lo sovrascrive per questa pagina.
 
 ## Archiviare ed eliminare gallerie
 
@@ -91,10 +101,12 @@ Studio (con accesso come proprietario o admin):
 | | |
 |---|---|
 | `GET/POST /pages` | elenco, creazione (`{title, galleryId?}`) |
-| `GET/PATCH/DELETE /pages/:id` | pagina e sue gallerie; titolo, introduzione, slug, accesso, password, branding, pagina iniziale |
+| `GET/PATCH/DELETE /pages/:id` | pagina e sue gallerie; titolo, introduzione, slug, accesso, password, branding, pagina iniziale, aspetto |
+| `POST /pages/:id/assets/presign` | URL di caricamento per immagine di intestazione o logo (`{kind, contentType, contentLength}`) |
+| `GET /pages/:id/hero-candidates` | foto utilizzabili come immagine di intestazione |
 | `POST /pages/:id/galleries` | mettere una galleria in una pagina (`{galleryId}`) |
 | `PATCH/DELETE /pages/:id/galleries/:galleryId` | titolo su questa pagina, opt-in dell'anteprima; rimozione |
 | `POST /pages/:id/galleries/reorder` | `{order: [galleryId, …]}` |
 | `GET /galleries/:id/pages` | tutte le pagine e se contengono questa galleria |
 
-Pubblico (senza accesso; lo studio viene dall'host della richiesta, come per `/g/:slug`): `GET /p` (pagina iniziale), `GET /p/:slug`, `POST /p/:slug/unlock`, `GET /p/:slug/covers/:gallerySlug`.
+Pubblico (senza accesso; lo studio viene dall'host della richiesta, come per `/g/:slug`): `GET /p` (pagina iniziale), `GET /p/:slug`, `POST /p/:slug/unlock`, `GET /p/:slug/covers/:gallerySlug`, `GET /p/:slug/assets/hero|logo`.

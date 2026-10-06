@@ -30,11 +30,11 @@ From a gallery, **Share → Pages → Add to page** does the same in one step, a
 | **Link only** (default) | Anyone who has the link | Told not to (`noindex`) | No |
 | **Password** | Anyone who has the link and the password | Told not to (`noindex`) | No |
 
-A password page shows only its title until it is unlocked; its introduction and galleries are not sent to the browser. The password is separate from the passwords of the galleries on it.
+Until a password page is unlocked, its introduction, header button and galleries are not sent to the browser. By default visitors see only the password field. Switch on **Show header before unlocking** (under *Who can open this page*) to show the header image, logo and title above it. The password is separate from the passwords of the galleries on it.
 
 ## What visitors see
 
-A card shows the cover (in its original proportions, in a justified grid), the title, the creation date, the number of files, the description and, for a password gallery, a lock.
+A card shows the cover, the title, the creation date, the number of files, the description and, for a password gallery, a lock. How the cards are laid out, and which of these they show, is set under **Design** (see below).
 
 **Which galleries are listed.** A gallery appears on a page only while it is **active**, **not expired** and can be **opened without a share link** (public access on). Otherwise it is skipped, and in the editor it is marked with the reason ("Not shown: draft / archived / expired / needs a share link"). Its place on the page is kept, so it comes back where it was.
 
@@ -46,7 +46,7 @@ This is decided when the page is loaded, not when you add the gallery: a gallery
 
 ### Covers stay private in storage
 
-Cover images are not linked to storage directly. They load through `/api/v1/p/<page>/covers/<gallery>`, which checks the rules above on every request and then redirects to a link that works for five minutes. Switching a preview off therefore takes effect within minutes, and the storage bucket stays private as described in [STORAGE.md](STORAGE.md). The first cover also serves as the preview image when the page link is shared.
+Cover images are not linked to storage directly. They load through `/api/v1/p/<page>/covers/<gallery>`, which checks the rules above on every request and then redirects to a link that works for five minutes. Switching a preview off therefore takes effect within minutes, and the storage bucket stays private as described in [STORAGE.md](STORAGE.md). The page's header image, its logo and a header photo taken from a gallery load the same way, through `/api/v1/p/<page>/assets/hero|logo`. When the page link is shared, the header image is the preview image; without one, the first cover is.
 
 ## The start page (`/`)
 
@@ -64,7 +64,17 @@ A page's slug is random by default (`/p/k3m9x4tqzr7a`) and can be changed under 
 
 ## Design
 
-By default a page uses your studio's default design (logo, colours, font). Pick another profile under **Details → Design** if a page should look different. The introduction supports Markdown.
+A page can look like a landing page, not just a list. The **Design** section of the page editor has the same header options as a gallery, and every change is saved right away:
+
+- **Header layout:** Minimal, Splash (full screen), Side by side or Centered. Title and introduction (Markdown) come from *Details*.
+- **Header image:** upload your own, or take a photo from a gallery on this page. Only galleries that are shown on the page and have **no password** can lend a photo. This is checked again on every visit: if that gallery later gets a password, or leaves the page, the photo disappears from the header and the editor says so.
+- **Overlay colour and blur** over the header image, or a **background colour** without one.
+- **Logo** in the header, in three sizes. It replaces the branding logo strip at the top.
+- **Header button**, e.g. *Book a session*, linking to a website, an email (`mailto:`) or a phone number (`tel:`). Shown only once the page is open.
+- **Galleries:** *Grid* (justified rows, as before), *Editorial* (the first gallery large, the others in columns) or *Bands* (one full-width band per gallery); title on the image or below it; date and number of photos on or off.
+- **Footer** (Markdown), **fonts** and **colours** for this page only.
+
+Without any of this a page looks as before. The branding profile (logo, colours, font) is still chosen under **Details → Branding profile**; the design settings override it for this page.
 
 ## Archiving and deleting galleries
 
@@ -91,10 +101,12 @@ Studio (logged in as owner or admin):
 | | |
 |---|---|
 | `GET/POST /pages` | list, create (`{title, galleryId?}`) |
-| `GET/PATCH/DELETE /pages/:id` | page and its galleries; title, intro, slug, access, password, branding, start page |
+| `GET/PATCH/DELETE /pages/:id` | page and its galleries; title, intro, slug, access, password, branding, start page, design |
+| `POST /pages/:id/assets/presign` | upload URL for header image or logo (`{kind, contentType, contentLength}`) |
+| `GET /pages/:id/hero-candidates` | photos that may become the header image |
 | `POST /pages/:id/galleries` | put a gallery on a page (`{galleryId}`) |
 | `PATCH/DELETE /pages/:id/galleries/:galleryId` | title on this page, preview opt-in; remove |
 | `POST /pages/:id/galleries/reorder` | `{order: [galleryId, …]}` |
 | `GET /galleries/:id/pages` | every page and whether it holds this gallery |
 
-Public (no login; the studio comes from the request host, as for `/g/:slug`): `GET /p` (start page), `GET /p/:slug`, `POST /p/:slug/unlock`, `GET /p/:slug/covers/:gallerySlug`.
+Public (no login; the studio comes from the request host, as for `/g/:slug`): `GET /p` (start page), `GET /p/:slug`, `POST /p/:slug/unlock`, `GET /p/:slug/covers/:gallerySlug`, `GET /p/:slug/assets/hero|logo`.

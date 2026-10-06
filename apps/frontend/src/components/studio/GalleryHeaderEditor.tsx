@@ -398,7 +398,7 @@ export function GalleryHeaderEditor({ gallery, files, onChanged }: Props) {
 // ---------------------------------------------------------------------------
 /** Wiederverwendbare Markdown-Eingabe mit debounced Save + Edit/Preview-
  *  Toggle. Verwendet von Welcome- und Footer-Markdown. */
-function MarkdownField({
+export function MarkdownField({
   label,
   hint,
   placeholder,
@@ -472,7 +472,7 @@ function MarkdownField({
 }
 
 // ---------------------------------------------------------------------------
-function Field({
+export function Field({
   label,
   hint,
   actions,
@@ -497,7 +497,7 @@ function Field({
   );
 }
 
-function FileInputButton({
+export function FileInputButton({
   accept,
   label,
   onChange,
@@ -601,7 +601,7 @@ function HeroFromGalleryDropdown({
   );
 }
 
-function RgbPicker({
+export function RgbPicker({
   value,
   onChange,
 }: {
@@ -642,7 +642,7 @@ function RgbPicker({
   );
 }
 
-function RgbaPicker({
+export function RgbaPicker({
   value,
   onChange,
 }: {
@@ -732,7 +732,7 @@ function RgbaPicker({
 /** Radio-Card-Picker für Hero-Layout-Varianten. Jede Karte ist ein
  *  Mini-Diagramm aus Divs, damit der Studio-User vor dem Klick sieht
  *  wie sich der Customer-Header anordnet. */
-function HeroLayoutPicker({
+export function HeroLayoutPicker({
   value,
   onChange,
 }: {
@@ -827,7 +827,7 @@ function HeroLayoutPicker({
  *  Trigger denselben Font-Look (browser-abhängig, aber Chrome/Firefox
  *  rendern den selected text im option-font). Wir bauen die Preview
  *  zusätzlich darunter, damit Safari auch was sieht. */
-function FontSelect({
+export function FontSelect({
   value,
   onChange,
 }: {

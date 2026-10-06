@@ -29,6 +29,10 @@ Changes werden trotzdem klar als solche markiert. Details: `docs/VERSIONING.md`.
 
 ## [Unreleased]
 
+## [0.90.0] - 2026-10-06
+
+A pull is enough. The database migration (new columns for page design) runs automatically on start; existing pages look as before.
+
 ### Added
 - **Pages: design options like galleries** (#65). The *Design* section of the page editor offers the gallery header (four layouts, header image, logo, overlay colour and blur, background colour), fonts, colours and a Markdown footer for a page. On top: how the galleries are shown (*Grid*, *Editorial*, *Bands*), title on the image or below it, date and photo count on or off, and an optional header button (e.g. "Book a session", linking to a website, `mailto:` or `tel:`). The header image can be uploaded or taken from a gallery on the page, but only from one without a password; this is checked on every visit. The header image is also the preview image when the page link is shared. Pages without these settings look as before.
 - **Password pages: "Show header before unlocking".** Off (default): visitors see only the password field (until now the title was shown above it). On: header image, logo and title above it; introduction, button and galleries only after unlocking.

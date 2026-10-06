@@ -29,6 +29,8 @@ Changes werden trotzdem klar als solche markiert. Details: `docs/VERSIONING.md`.
 
 ## [Unreleased]
 
+## [0.89.0] - 2026-10-06
+
 A pull is enough. **Existing installations keep running on MinIO, nothing changes for them.** Only new installations (those that create their `.env` from `.env.example` from now on) start with RustFS. Installations with external S3 (Hetzner, R2, AWS, B2 …) are not affected either way.
 
 ### Added

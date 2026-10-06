@@ -32,6 +32,7 @@ import { SubscriptionBanner } from "@/components/studio/SubscriptionBanner";
 import { PreArchiveBanner } from "@/components/studio/PreArchiveBanner";
 import { AnnouncementBanner } from "@/components/studio/AnnouncementBanner";
 import { applyStudioAccent, applyStudioTheme } from "@/lib/studio-appearance";
+import { useFavicon } from "@/lib/useFavicon";
 import { Logo } from "@/components/ui/Logo";
 import {
   PendingDeletionBanner,
@@ -40,6 +41,7 @@ import {
 
 type NavIconName =
   | "galleries"
+  | "pages"
   | "analytics"
   | "print"
   | "design"
@@ -65,6 +67,15 @@ function NavIcon({ name }: { name: NavIconName }) {
           <rect x="3" y="3" width="18" height="18" rx="2" />
           <circle cx="8.5" cy="8.5" r="1.5" />
           <path d="m21 15-4.5-4.5L6 21" />
+        </svg>
+      );
+    case "pages":
+      return (
+        <svg {...common}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18" />
+          <rect x="6.5" y="12" width="4.5" height="5" rx="0.75" />
+          <rect x="13" y="12" width="4.5" height="5" rx="0.75" />
         </svg>
       );
     case "analytics":
@@ -131,6 +142,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { href: "/studio",            labelKey: "nav.galleries",  fallback: "Galerien",      icon: "galleries",  prefix: "/studio" },
+  { href: "/studio/pages",      labelKey: "nav.pages",      fallback: "Pages",         icon: "pages",      prefix: "/studio/pages",      rolesAllowed: ["owner", "admin"], requiresFeature: "landing_pages" },
   { href: "/studio/analytics",  labelKey: "nav.analytics",  fallback: "Analytics",     icon: "analytics",  prefix: "/studio/analytics",  rolesAllowed: ["owner", "admin"], requiresFeature: "advanced_analytics" },
   { href: "/studio/print-shop", labelKey: "nav.printShop",  fallback: "Print-Shop",    icon: "print",      prefix: "/studio/print-shop", rolesAllowed: ["owner", "admin"], requiresFeature: "print_shop" },
   // Sammeleintrag „Gestaltung" → Tabs: Branding · Templates · Tags
@@ -147,7 +159,7 @@ const NAV: NavItem[] = [
 // Top-Level-Segmente, die KEINE Galerie sind — damit der „Galerien"-
 // Eintrag bei /studio/<bekanntes-segment> nicht fälschlich aktiv wird.
 const RESERVED_SEGMENTS = new Set([
-  "analytics", "print-shop", "brandings", "templates", "tags",
+  "analytics", "pages", "print-shop", "brandings", "templates", "tags",
   "settings", "team", "webhooks", "exports", "audit", "avv",
   "account", "billing",
 ]);
@@ -187,6 +199,9 @@ export function StudioShell({ children }: { children: React.ReactNode }) {
     lightUrl: string | null;
   }>({ url: null, lightUrl: null });
   const [studioTheme, setStudioTheme] = useState<"dark" | "light">("dark");
+  // Favicon des Studios — gilt auch im Backend-Tab, siehe lib/useFavicon.ts.
+  const [studioFavicon, setStudioFavicon] = useState<string | null>(null);
+  useFavicon(studioFavicon);
 
   useEffect(() => {
     let cancelled = false;
@@ -205,7 +220,7 @@ export function StudioShell({ children }: { children: React.ReactNode }) {
           url: r.studioLogoUrl ?? null,
           lightUrl: r.studioLogoLightUrl ?? null,
         });
-        applyFavicon(r.studioFaviconUrl ?? null);
+        setStudioFavicon(r.studioFaviconUrl ?? null);
       } catch {
         setUserRole("member");
       }
@@ -583,29 +598,4 @@ function SidebarFooter({
       <AppVersion className="px-3 pb-0.5" />
     </div>
   );
-}
-
-/**
- * Setzt das Studio-Favicon im Backend-Tab.
- *
- * Wie in GalleryShell: layout.tsx deklariert MEHRERE <link rel="icon">
- * (SVG plus zwei PNG-Groessen). Nur den ersten umzubiegen reicht nicht —
- * Browser bevorzugen die groessenannotierten PNGs, das Lumio-Icon wuerde
- * gewinnen. Also alle entfernen und genau einen setzen.
- *
- * Kein type-Attribut: der Browser erkennt das Format selbst, und ein
- * falsch gesetzter type laesst ihn das Icon verwerfen.
- */
-function applyFavicon(url: string | null) {
-  if (typeof document === "undefined") return;
-  if (!url) return;
-  document
-    .querySelectorAll<HTMLLinkElement>(
-      'link[rel="icon"], link[rel="shortcut icon"]'
-    )
-    .forEach((el) => el.remove());
-  const link = document.createElement("link");
-  link.rel = "icon";
-  link.href = url;
-  document.head.appendChild(link);
 }

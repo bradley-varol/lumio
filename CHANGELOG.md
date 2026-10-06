@@ -29,6 +29,19 @@ Changes werden trotzdem klar als solche markiert. Details: `docs/VERSIONING.md`.
 
 ## [Unreleased]
 
+A pull is enough. Frontend and API are affected, so only the main server. The database migration (new tables for pages) runs automatically on deploy. Nothing changes until a studio creates a page.
+
+### Added
+
+- Landing pages: a studio can now create pages ("Pages" in the studio navigation), curated, ordered lists of galleries under a link of their own, for example a public portfolio or one page per client. Owners and admins put galleries on a page by hand, choose the order, and decide who can open it: public, link only, or password. A new page is link only to begin with. A page lists galleries, it never opens them: a card leads to the gallery, which applies its own rules. Galleries with a password are listed with a lock and show only title and date unless the studio switches the preview on for them. A gallery's Share tab shows which pages it is on and puts it on one (or on a new one) in a single step, and archiving or deleting a gallery that is on pages says so first. See `docs/LANDING_PAGES.md`.
+- A public page can be made the studio's **start page**: it is then shown on `/` instead of the redirect to the login (single mode, subdomain and custom domain). The login stays at `/login` and is linked from the page. A studio that does not set one sees no difference.
+- The feature sits behind the feature flag `landing_pages`, on by default; the operator of a multi-tenant instance can switch it off per studio.
+- API: studio routes under `/pages…` and public ones under `/p…`.
+
+### Fixed
+
+- With a **studio favicon** set (Appearance), or a **branding favicon** on a gallery or page, the app could freeze on navigation: the URL changed, the page did not, and nothing navigated any more until a reload (in Firefox the console shows `can't access property "removeChild", n.stateNode.parentNode is null`). In the studio this happened on the first navigation; on a branded start page, on going back from a gallery or following the login link. The favicon code deleted the default icon links that Next.js manages, and the next page change failed when it tried to remove them itself. The default icons are now set aside instead and restored when leaving the studio or gallery, so the custom favicon also stays in place across page changes, where before it could lose to the default icons.
+
 ## [0.87.0] - 2026-10-06
 
 A pull is enough — the database migrates automatically on start (one new column). Only the main server is affected.
